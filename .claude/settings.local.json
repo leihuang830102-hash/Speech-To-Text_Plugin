@@ -1,0 +1,20 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(node:*)",
+      "Bash(npm install:*)",
+      "Bash(pip install:*)",
+      "Bash(ffmpeg -version)",
+      "Bash(npm run:*)",
+      "Bash(python src/scripts/stt.py --backend auto --model tiny --language en --audio-file tests/stt/fixtures/en_short.wav)",
+      "Bash(set KMP_DUPLICATE_LIB_OK=TRUE)",
+      "Bash(python src/scripts/stt.py --backend faster-whisper --model tiny --language en --audio-file tests/stt/fixtures/en_short.wav)",
+      "Bash(KMP_DUPLICATE_LIB_OK=TRUE python src/scripts/stt.py --backend faster-whisper --model tiny --language en --audio-file tests/stt/fixtures/en_short.wav)",
+      "Bash(KMP_DUPLICATE_LIB_OK=TRUE python -c \"from faster_whisper import WhisperModel; model = WhisperModel\\(''tiny'', device=''cpu'', compute_type=''int8''\\)\")",
+      "Bash(KMP_DUPLICATE_LIB_OK=TRUE python src/scripts/stt.py --list-backends)",
+      "Bash(pip show:*)",
+      "Bash(HF_ENDPOINT=https://hf-mirror.com KMP_DUPLICATE_LIB_OK=TRUE python -c \"from faster_whisper import WhisperModel; model = WhisperModel\\(''tiny'', device=''cpu'', compute_type=''int8''\\)\")",
+      "Bash(KMP_DUPLICATE_LIB_OK=TRUE python src/scripts/stt.py --backend whisper --model tiny --language en --audio-file tests/stt/fixtures/en_short.wav)"
+    ]
+  }
+}

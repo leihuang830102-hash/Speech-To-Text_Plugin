@@ -1,0 +1,59 @@
+{
+  "cases": [
+    {
+      "id": "001",
+      "audio": "en_short.wav",
+      "expected": "This is a test.",
+      "language": "en",
+      "backend": "auto",
+      "model": "tiny",
+      "notes": "Basic English phrase"
+    },
+    {
+      "id": "002",
+      "audio": "en_long.wav",
+      "expected": "The quick brown fox jumps over the lazy dog. This is a longer sentence to test transcription accuracy.",
+      "language": "en",
+      "backend": "auto",
+      "model": "tiny",
+      "notes": "Long English sentence"
+    },
+    {
+      "id": "003",
+      "audio": "zh_short.wav",
+      "expected": "這是一個測試",
+      "language": "zh",
+      "backend": "auto",
+      "model": "tiny",
+      "notes": "Chinese - Whisper outputs Traditional characters"
+    },
+    {
+      "id": "004",
+      "audio": "zh_long.wav",
+      "expected": "與一時別是家人類與因轉換為文本的技術這個測試用力用於驗證中文與因時別的準確性",
+      "language": "zh",
+      "backend": "auto",
+      "model": "tiny",
+      "notes": "Chinese long - Whisper outputs Traditional characters"
+    },
+    {
+      "id": "005",
+      "audio": "en_numbers.wav",
+      "expected": "1, 2, 3, 4, 5, 6, 7, 8, 9, 10.",
+      "language": "en",
+      "backend": "auto",
+      "model": "tiny",
+      "notes": "Numbers - Whisper converts spoken numbers to digits"
+    },
+    {
+      "id": "006",
+      "audio": "zh_numbers.wav",
+      "expected": "12345678910",
+      "language": "zh",
+      "backend": "auto",
+      "model": "tiny",
+      "notes": "Chinese numbers - Whisper converts to digits"
+    }
+  ],
+  "lastUpdated": "2026-03-12T15:10:00.000Z"
+}

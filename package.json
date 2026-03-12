@@ -5,21 +5,27 @@
   "main": "dist/index.js",
   "scripts": {
     "build": "tsc",
-    "test": "node tests/test-runner.js",
+    "test": "node tests/stt/stt-runner.js",
+    "test:unit": "vitest run tests/unit",
+    "test:integration": "vitest run tests/integration",
+    "test:stt": "node tests/stt/stt-runner.js",
+    "test:all": "npm run test:unit && npm run test:integration && npm run test:stt",
+    "test:generate-fixtures": "node tests/stt/generate-fixtures.js",
     "lint": "eslint src --ext .ts,.tsx"
   },
-  "keywords": ["opencode", "plugin", "voice", "stt", "speech"],
+  "keywords": [
+    "opencode",
+    "plugin",
+    "voice",
+    "stt",
+    "speech"
+  ],
   "author": "",
   "license": "MIT",
-  "dependencies": {
-    "sounddevice": "^0.4.6",
-    "soundfile": "^0.12.1",
-    "numpy": "^0.0.1",
-    "faster-whisper": "^1.0.0"
-  },
   "devDependencies": {
     "@types/node": "^20.0.0",
-    "typescript": "^5.0.0"
+    "typescript": "^5.0.0",
+    "vitest": "^4.1.0"
   },
   "peerDependencies": {
     "@opencode-ai/plugin": "*"

@@ -1,0 +1,75 @@
+{
+  "timestamp": "2026-03-12T15:09:52.392Z",
+  "summary": {
+    "total": 6,
+    "passed": 6,
+    "failed": 0,
+    "avgSimilarity": 100,
+    "totalDuration": 43682
+  },
+  "metadata": {
+    "mode": "single"
+  },
+  "results": [
+    {
+      "id": "001",
+      "success": true,
+      "expected": "This is a test.",
+      "actual": "This is a test.",
+      "similarity": 100,
+      "backend": "whisper",
+      "model": "tiny",
+      "duration": 5329
+    },
+    {
+      "id": "002",
+      "success": true,
+      "expected": "The quick brown fox jumps over the lazy dog. This is a longer sentence to test transcription accuracy.",
+      "actual": "The quick brown fox jumps over the lazy dog. This is a longer sentence to test transcription accuracy.",
+      "similarity": 100,
+      "backend": "whisper",
+      "model": "tiny",
+      "duration": 5660
+    },
+    {
+      "id": "003",
+      "success": true,
+      "expected": "這是一個測試",
+      "actual": "這是一個測試",
+      "similarity": 100,
+      "backend": "whisper",
+      "model": "tiny",
+      "duration": 7132
+    },
+    {
+      "id": "004",
+      "success": true,
+      "expected": "與一時別是家人類與因轉換為文本的技術這個測試用力用於驗證中文與因時別的準確性",
+      "actual": "與一時別是家人類與因轉換為文本的技術這個測試用力用於驗證中文與因時別的準確性",
+      "similarity": 100,
+      "backend": "whisper",
+      "model": "tiny",
+      "duration": 7627
+    },
+    {
+      "id": "005",
+      "success": true,
+      "expected": "1, 2, 3, 4, 5, 6, 7, 8, 9, 10.",
+      "actual": "1, 2, 3, 4, 5, 6, 7, 8, 9, 10.",
+      "similarity": 100,
+      "backend": "whisper",
+      "model": "tiny",
+      "duration": 9604
+    },
+    {
+      "id": "006",
+      "success": true,
+      "expected": "12345678910",
+      "actual": "12345678910",
+      "similarity": 100,
+      "backend": "whisper",
+      "model": "tiny",
+      "duration": 8330
+    }
+  ]
+}

@@ -1,0 +1,157 @@
+**Updated Plan for Local Speech-to-Text in OpenCode Desktop (Windows)**  
+**Goal**: Fully local, private, whisper.cpp-powered voice input that works **globally** (press hotkey anywhere → speak → text auto-copies to clipboard → Ctrl+V into OpenCode input). No cloud, no API keys.  
+
+**Why this architecture?**  
+- Desktop UI (Electron + opencode-cli sidecar) does **not** expose hotkey registration or direct renderer access to plugins yet (confirmed in current docs + issues).  
+- Python is **far easier** for Windows audio + global hotkeys + pywhispercpp bindings (official, pre-built wheels).  
+- Plugin = thin TS wrapper (safe, no crash risk).  
+- Matches your request: Python where possible, plugin-packaged, TDD via OpenCode itself, 2 clear phases + rollback.  
+
+**Safety first (rollback plan)**:  
+- Everything lives in `~/.config/opencode/plugins/` (Windows: `%USERPROFILE%\.config\opencode\plugins`).  
+- If anything feels wrong → rename the folder to `voice-plugin-disabled` and restart OpenCode Desktop → 100% back to normal (official troubleshooting method). No source code touched.  
+- Python runs as separate background process (easy to kill).  
+
+### Phase 1: Make whisper.cpp STT Work (Standalone Python – Test Material Ready)
+**Duration**: 30–60 min with OpenCode helping.  
+**Output**: `opencode-voice.py` → global hotkey (default Ctrl+Alt+V), records mic, transcribes instantly, copies to clipboard.
+
+**Step-by-step (do this first)**:
+
+1. **Install Python ecosystem** (run in PowerShell as admin once):
+   ```powershell
+   # Python 3.11+ already on most Windows
+   pip install pywhispercpp sounddevice numpy pyperclip pynput scipy
+   # Optional: faster recording on Windows
+   pip install sounddevice[extras]
+   ```
+
+2. **Download whisper.cpp model** (base.en is perfect balance, ~75 MB):
+   ```powershell
+   mkdir %USERPROFILE%\.cache\opencode-voice\models
+   # Download base.en from HuggingFace or whisper.cpp repo
+   # Easiest: use this one-liner (or manual)
+   curl -L -o %USERPROFILE%\.cache\opencode-voice\models\ggml-base.en.bin https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.en.bin
+   ```
+
+3. **Use OpenCode Desktop itself for TDD development** (copy-paste this prompt into a new OpenCode chat):
+   ```
+   TDD task: Create a single-file Python script "opencode-voice.py" for Windows that:
+   - Uses pywhispercpp (CPU or GPU if available) with model at %USERPROFILE%\.cache\opencode-voice\models\ggml-base.en.bin
+   - Registers global hotkey Ctrl+Alt+V (configurable)
+   - On hotkey: starts recording from default microphone using sounddevice (16kHz mono)
+   - Shows toast "🎤 Recording... release hotkey or press Ctrl to stop"
+   - On stop: transcribes with Whisper, copies clean text to clipboard using pyperclip
+   - Prints status to console + optional system toast
+   - Includes config section at top (model_path, hotkey, language="en")
+   - Full unit tests with pytest (mock recording & transcription)
+   - Error handling + fallback messages
+   - Requirements.txt
+   Follow strict TDD: write failing test first, then code, then passing test. Output the complete script + test file.
+   ```
+
+   Run the generated script:
+   ```powershell
+   python opencode-voice.py
+   ```
+   Test material (speak this after hotkey):
+   > "Hello OpenCode, this is a test of speech-to-text using whisper dot cpp on Windows desktop. The quick brown fox jumps over the lazy dog."
+
+   Expected: text appears in clipboard → paste into any app (including OpenCode input).  
+   **Verify**: `Get-Clipboard` in PowerShell should show your spoken text.
+
+4. **Polish & test** (ask OpenCode again if needed):
+   - Add `--model tiny|base|small` flag
+   - Add VAD (voice activity detection) so it auto-stops after silence (pywhispercpp supports it)
+   - Make it run minimized (add to Windows startup later if you want)
+
+**Done Phase 1** when you can speak → text in clipboard reliably. This alone is already useful!
+
+### Phase 2: Integrate as OpenCode Plugin (Safe, Configurable, No Crash Risk)
+**Duration**: 20–40 min.  
+**Output**: `voice-plugin` folder → auto-loads on OpenCode start, manages the Python daemon + config.
+
+**Step-by-step**:
+
+1. **Create plugin folder** (safe location):
+   ```powershell
+   mkdir %USERPROFILE%\.config\opencode\plugins\opencode-voice
+   cd %USERPROFILE%\.config\opencode\plugins\opencode-voice
+   ```
+
+2. **Use OpenCode Desktop again for TDD** (new chat prompt):
+   ```
+   TDD task: Create a complete OpenCode plugin in folder "opencode-voice" that:
+   - Exports a Plugin using @opencode-ai/plugin
+   - On server.connected hook: checks if opencode-voice.py is running, starts it if not (via Bun $`python ...`)
+   - Adds plugin_config support in opencode.json (model, hotkey, enabled)
+   - Registers custom tool "voice_status" and "voice_restart"
+   - Uses tui.toast.show for "Voice service started – Ctrl+Alt+V anywhere"
+   - Uses tui.prompt.append if possible for future direct insert
+   - Includes package.json with @opencode-ai/plugin dependency
+   - Full test: mock context + check hooks
+   - README.md with Windows install instructions
+   Follow TDD: failing tests first.
+   ```
+
+   OpenCode will generate:
+   - `index.ts` (or .js)
+   - `package.json`
+   - `opencode.json` snippet
+
+3. **Install plugin dependencies**:
+   ```powershell
+   cd %USERPROFILE%\.config\opencode\plugins\opencode-voice
+   bun init -y
+   bun add @opencode-ai/plugin
+   ```
+
+4. **Link Python script**:
+   - Copy your `opencode-voice.py` from Phase 1 into the plugin folder (or point to it).
+   - Plugin will launch it automatically.
+
+5. **Activate**:
+   - Restart OpenCode Desktop.
+   - It will auto-start the voice Python daemon and show toast.
+   - Test: press Ctrl+Alt+V anywhere → speak test sentence → paste into OpenCode input field.
+
+**Rollback if anything feels off**:
+- Close OpenCode
+- Rename folder: `opencode-voice` → `opencode-voice-disabled`
+- Delete any Python process in Task Manager ("opencode-voice.py")
+- Restart OpenCode → back to stock, zero changes.
+
+### Phase 3: Pack as GitHub Plugin (Ready to Upload)
+**Final packaging** (do this once everything works):
+
+1. **Structure your GitHub repo** (`opencode-voice-whisper`):
+   ```
+   /
+   ├── plugin/              # the TS plugin from Phase 2
+   ├── voice/               # opencode-voice.py + requirements.txt
+   ├── install-windows.bat  # one-click setup
+   ├── README.md
+   └── opencode.json.example
+   ```
+
+2. **install-windows.bat** (generated by OpenCode):
+   ```bat
+   @echo off
+   pip install -r voice\requirements.txt
+   echo Plugin ready! Copy plugin folder to %USERPROFILE%\.config\opencode\plugins\opencode-voice
+   pause
+   ```
+
+3. **Publish**:
+   - Make repo public
+   - Add to `opencode.json` as npm later (if you `bun publish` the plugin part)
+   - Or just tell users: "git clone + run install-windows.bat + copy plugin folder"
+
+**Total time**: 1–2 hours with OpenCode doing 90% of the coding/tests.  
+**Result**: Global hotkey voice input that works perfectly in OpenCode Desktop (and every other Windows app). Fully local whisper.cpp. Plugin-style, zero risk to your installed OpenCode.
+
+**Ready to start?**  
+Open OpenCode Desktop right now, paste the **Phase 1 prompt** into a new session, and let it build the Python script.  
+When it's done and tested, come back here with any error/output and I'll give the exact Phase 2 prompt + fixes.
+
+You’ll have voice in OpenCode faster than anyone else! 🎤

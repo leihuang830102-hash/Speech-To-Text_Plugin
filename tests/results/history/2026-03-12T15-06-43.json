@@ -1,0 +1,75 @@
+{
+  "timestamp": "2026-03-12T15:06:43.847Z",
+  "summary": {
+    "total": 6,
+    "passed": 2,
+    "failed": 4,
+    "avgSimilarity": 43,
+    "totalDuration": 40645
+  },
+  "metadata": {
+    "mode": "single"
+  },
+  "results": [
+    {
+      "id": "001",
+      "success": true,
+      "expected": "This is a test",
+      "actual": "This is a test.",
+      "similarity": 92,
+      "backend": "whisper",
+      "model": "tiny",
+      "duration": 6100
+    },
+    {
+      "id": "002",
+      "success": true,
+      "expected": "The quick brown fox jumps over the lazy dog. This is a longer sentence to test transcription accuracy.",
+      "actual": "The quick brown fox jumps over the lazy dog. This is a longer sentence to test transcription accuracy.",
+      "similarity": 100,
+      "backend": "whisper",
+      "model": "tiny",
+      "duration": 6848
+    },
+    {
+      "id": "003",
+      "success": false,
+      "expected": "这是一个测试",
+      "actual": "這是一個測試",
+      "similarity": 33,
+      "backend": "whisper",
+      "model": "tiny",
+      "duration": 6731
+    },
+    {
+      "id": "004",
+      "success": false,
+      "expected": "语音识别是将人类语音转换为文本的技术。这个测试用例用于验证中文语音识别的准确性。",
+      "actual": "與一時別是家人類與因轉換為文本的技術這個測試用力用於驗證中文與因時別的準確性",
+      "similarity": 30,
+      "backend": "whisper",
+      "model": "tiny",
+      "duration": 7511
+    },
+    {
+      "id": "005",
+      "success": false,
+      "expected": "One two three four five six seven eight nine ten",
+      "actual": "1, 2, 3, 4, 5, 6, 7, 8, 9, 10.",
+      "similarity": 0,
+      "backend": "whisper",
+      "model": "tiny",
+      "duration": 6828
+    },
+    {
+      "id": "006",
+      "success": false,
+      "expected": "一二三四五六七八九十",
+      "actual": "12345678910",
+      "similarity": 0,
+      "backend": "whisper",
+      "model": "tiny",
+      "duration": 6627
+    }
+  ]
+}

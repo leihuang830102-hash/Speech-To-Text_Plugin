@@ -1,0 +1,57 @@
+{
+  "timestamp": "2026-03-12T14:37:33.657Z",
+  "summary": {
+    "total": 6,
+    "passed": 0,
+    "failed": 6,
+    "avgSimilarity": 0,
+    "totalDuration": 534
+  },
+  "metadata": {
+    "mode": "single"
+  },
+  "results": [
+    {
+      "id": "001",
+      "success": false,
+      "expected": "This is a test",
+      "similarity": 0,
+      "duration": 91
+    },
+    {
+      "id": "002",
+      "success": false,
+      "expected": "The quick brown fox jumps over the lazy dog. This is a longer sentence to test transcription accuracy.",
+      "similarity": 0,
+      "duration": 88
+    },
+    {
+      "id": "003",
+      "success": false,
+      "expected": "这是一个测试",
+      "similarity": 0,
+      "duration": 86
+    },
+    {
+      "id": "004",
+      "success": false,
+      "expected": "语音识别是将人类语音转换为文本的技术。这个测试用例用于验证中文语音识别的准确性。",
+      "similarity": 0,
+      "duration": 88
+    },
+    {
+      "id": "005",
+      "success": false,
+      "expected": "One two three four five six seven eight nine ten",
+      "similarity": 0,
+      "duration": 88
+    },
+    {
+      "id": "006",
+      "success": false,
+      "expected": "一二三四五六七八九十",
+      "similarity": 0,
+      "duration": 93
+    }
+  ]
+}

@@ -1,0 +1,2 @@
+https://github.com/MasuRii/opencode-smart-voice-notify
+https://github.com/zenobi-us/opencode-plugin-template/
