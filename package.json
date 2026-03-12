@@ -1,0 +1,27 @@
+{
+  "name": "opencode-doubao-tts",
+  "version": "1.0.0",
+  "description": "语音输入插件 - 按住浮窗说话，文字直接输入到OpenCode",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc",
+    "test": "node tests/test-runner.js",
+    "lint": "eslint src --ext .ts,.tsx"
+  },
+  "keywords": ["opencode", "plugin", "voice", "stt", "speech"],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "sounddevice": "^0.4.6",
+    "soundfile": "^0.12.1",
+    "numpy": "^0.0.1",
+    "faster-whisper": "^1.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "typescript": "^5.0.0"
+  },
+  "peerDependencies": {
+    "@opencode-ai/plugin": "*"
+  }
+}

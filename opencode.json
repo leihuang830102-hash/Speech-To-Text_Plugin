@@ -1,0 +1,42 @@
+{
+  "name": "doubao-tts",
+  "version": "1.0.0",
+  "displayName": "豆包语音输入",
+  "description": "按住浮窗说话，文字直接输入到OpenCode",
+  "main": "dist/index.js",
+  "enabled": true,
+  "settings": {
+    "pythonPath": {
+      "type": "string",
+      "default": "python",
+      "description": "Python解释器路径"
+    },
+    "sttBackend": {
+      "type": "string",
+      "default": "whisper",
+      "enum": ["moonshine", "whisper", "faster-whisper"],
+      "description": "语音识别后端"
+    },
+    "modelSize": {
+      "type": "string",
+      "default": "tiny",
+      "enum": ["tiny", "base", "small", "medium"],
+      "description": "模型大小（越小越快）"
+    },
+    "language": {
+      "type": "string",
+      "default": "zh",
+      "description": "识别语言代码"
+    },
+    "maxDuration": {
+      "type": "number",
+      "default": 30,
+      "description": "最大录音时长（秒）"
+    },
+    "hotkey": {
+      "type": "string",
+      "default": "Ctrl+Shift+V",
+      "description": "语音输入快捷键"
+    }
+  }
+}

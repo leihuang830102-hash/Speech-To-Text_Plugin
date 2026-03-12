@@ -1,0 +1,13 @@
+{
+  "cases": [
+    {
+      "id": "001",
+      "audio": "test_sample_audio.wav",
+      "expected": "This is a test",
+      "language": "en",
+      "backend": "whisper",
+      "model": "tiny"
+    }
+  ],
+  "lastUpdated": "2026-03-12T00:00:00.000Z"
+}
