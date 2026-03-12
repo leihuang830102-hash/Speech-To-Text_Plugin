@@ -13,7 +13,7 @@
     },
     "sttBackend": {
       "type": "string",
-      "default": "whisper",
+      "default": "faster-whisper",
       "enum": ["moonshine", "whisper", "faster-whisper"],
       "description": "语音识别后端"
     },
