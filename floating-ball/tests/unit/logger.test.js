@@ -42,4 +42,36 @@ describe('Logger', () => {
     expect(content).toContain('This should appear');
     expect(content).not.toContain('Should not appear');
   });
+
+  it('should rotate log file when size exceeds maxFileSize', () => {
+    const smallLogger = new Logger({
+      logDir: testLogDir,
+      level: 'DEBUG',
+      maxFileSize: 100  // 100 bytes for testing
+    });
+
+    // Write more than 100 bytes
+    for (let i = 0; i < 20; i++) {
+      smallLogger.info('main', 'This is a test message that will exceed limit');
+    }
+
+    expect(fs.existsSync(path.join(testLogDir, 'app.log.1'))).toBe(true);
+  });
+
+  it('should delete old logs when maxFiles exceeded', () => {
+    const rotatingLogger = new Logger({
+      logDir: testLogDir,
+      level: 'DEBUG',
+      maxFileSize: 50,
+      maxFiles: 2
+    });
+
+    // Trigger multiple rotations
+    for (let i = 0; i < 50; i++) {
+      rotatingLogger.info('main', `Message ${i}`);
+    }
+
+    const files = fs.readdirSync(testLogDir).filter(f => f.startsWith('app.log'));
+    expect(files.length).toBeLessThanOrEqual(3); // app.log + app.log.1 + app.log.2
+  });
 });
