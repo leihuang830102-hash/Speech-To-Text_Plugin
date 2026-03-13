@@ -2,7 +2,6 @@
   margin: 0;
   padding: 0;
   box-sizing: border-box;
-  -webkit-app-region: drag;
 }
 
 body {
@@ -19,35 +18,77 @@ body {
   justify-content: center;
   cursor: pointer;
   position: relative;
-  -webkit-app-region: no-drag;
   transition: background-color 0.2s ease;
-}
-
-.ball-inner {
-  z-index: 2;
-}
-
-.icon {
-  font-size: 24px;
   user-select: none;
 }
 
-/* States */
+/* Outer ring - draggable for window movement */
+.ball-drag-area {
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  -webkit-app-region: drag;
+}
+
+/* Inner button - clickable for recording (no-drag) */
+.record-btn {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10;
+  -webkit-app-region: no-drag;
+  cursor: pointer;
+}
+
+.record-btn:active {
+  transform: scale(0.9);
+}
+
+.icon {
+  font-size: 20px;
+  user-select: none;
+  pointer-events: none;
+}
+
+/* Ripple effect container */
+.ripple {
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, 0.5);
+  opacity: 0;
+  z-index: 1;
+  pointer-events: none;
+}
+
+/* ============================================================================
+   State Colors
+   ============================================================================ */
+
 .ball.idle {
   background: linear-gradient(135deg, #4a90d9 0%, #357abd 100%);
   box-shadow: 0 4px 15px rgba(74, 144, 217, 0.4);
 }
 
+.ball.warming {
+  background: linear-gradient(135deg, #f39c12 0%, #e67e22 100%);
+  box-shadow: 0 4px 15px rgba(243, 156, 18, 0.4);
+  animation: pulse 0.5s ease-in-out infinite;
+}
+
 .ball.recording {
   background: linear-gradient(135deg, #e74c3c 0%, #c0392b 100%);
   box-shadow: 0 4px 15px rgba(231, 76, 60, 0.4);
-  animation: pulse 1s ease-in-out infinite;
 }
 
 .ball.processing {
   background: linear-gradient(135deg, #f39c12 0%, #e67e22 100%);
   box-shadow: 0 4px 15px rgba(243, 156, 18, 0.4);
-  animation: spin 1s linear infinite;
 }
 
 .ball.success {
@@ -60,10 +101,21 @@ body {
   box-shadow: 0 4px 15px rgba(127, 140, 141, 0.4);
 }
 
-/* Animations */
+/* ============================================================================
+   Animations
+   ============================================================================ */
+
+.ball.recording .record-btn {
+  animation: pulse 1s ease-in-out infinite;
+}
+
+.ball.processing .record-btn {
+  animation: spin 1s linear infinite;
+}
+
 @keyframes pulse {
   0%, 100% { transform: scale(1); }
-  50% { transform: scale(1.1); }
+  50% { transform: scale(1.15); }
 }
 
 @keyframes spin {
@@ -71,17 +123,7 @@ body {
   to { transform: rotate(360deg); }
 }
 
-/* Ripple effect */
-.ripple {
-  position: absolute;
-  width: 100%;
-  height: 100%;
-  border-radius: 50%;
-  border: 2px solid rgba(255, 255, 255, 0.5);
-  opacity: 0;
-  z-index: 1;
-}
-
+/* Ripple animation for recording */
 .ball.recording .ripple {
   animation: ripple 1.5s ease-out infinite;
 }
@@ -97,11 +139,10 @@ body {
   }
 }
 
-/* Hover effect */
-.ball:hover {
-  filter: brightness(1.1);
-}
+/* ============================================================================
+   Hover Effects
+   ============================================================================ */
 
-.ball:active {
-  transform: scale(0.95);
+.record-btn:hover {
+  filter: brightness(1.1);
 }
