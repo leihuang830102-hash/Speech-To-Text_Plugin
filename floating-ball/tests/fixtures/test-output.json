@@ -1,0 +1,6 @@
+{
+  "success": true,
+  "text": "Hello world",
+  "backend": "test",
+  "model": "tiny"
+}
