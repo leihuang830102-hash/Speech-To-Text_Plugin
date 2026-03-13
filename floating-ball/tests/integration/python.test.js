@@ -19,6 +19,9 @@ const __dirname = path.dirname(__filename);
 // Path to floating-ball root directory
 const floatingBallRoot = path.resolve(__dirname, '../..');
 
+// 5 second safety timeout in case error event never fires
+const SAFETY_TIMEOUT = 5000;
+
 describe('Python Process Lifecycle', () => {
   it('should find Python executable', async () => {
     return new Promise((resolve, reject) => {
@@ -56,35 +59,69 @@ describe('Python Process Lifecycle', () => {
     expect(fs.existsSync(sttScriptPath)).toBe(true);
   });
 
-  it('should handle invalid Python path gracefully', async () => {
+  it('should execute STT script with --help flag', async () => {
     return new Promise((resolve, reject) => {
-      const pythonProcess = spawn('nonexistent_python_xyz123', ['--version']);
-      let errorOccurred = false;
+      const sttScriptPath = path.join(floatingBallRoot, 'stt', 'stt.py');
+      const pythonProcess = spawn('python', [sttScriptPath, '--help']);
+      let stdout = '';
+      let stderr = '';
+
+      pythonProcess.stdout.on('data', (data) => {
+        stdout += data.toString();
+      });
+
+      pythonProcess.stderr.on('data', (data) => {
+        stderr += data.toString();
+      });
+
+      const timeout = setTimeout(() => {
+        reject(new Error('Timeout waiting for STT script --help'));
+      }, SAFETY_TIMEOUT);
+
+      pythonProcess.on('close', (code) => {
+        clearTimeout(timeout);
+        try {
+          expect(code).toBe(0);
+          // Verify the script ran and showed help text
+          expect(stdout).toContain('Speech-to-Text');
+          expect(stdout).toContain('--backend');
+          expect(stdout).toContain('--check');
+          resolve();
+        } catch (error) {
+          reject(error);
+        }
+      });
 
       pythonProcess.on('error', (error) => {
-        errorOccurred = true;
-        try {
-          expect(error.code).toBe('ENOENT');
-          resolve();
-        } catch (assertionError) {
-          reject(assertionError);
-        }
+        clearTimeout(timeout);
+        reject(error);
+      });
+    });
+  });
+
+  it('should handle invalid Python path gracefully', async () => {
+    const errorPromise = new Promise((resolve, reject) => {
+      const pythonProcess = spawn('nonexistent_python_xyz123', ['--version']);
+
+      pythonProcess.on('error', (error) => {
+        resolve(error);
       });
 
       pythonProcess.on('close', (code) => {
-        // If we get here without an error event, something unexpected happened
-        if (!errorOccurred) {
-          reject(new Error(`Expected ENOENT error but process closed with code ${code}`));
-        }
+        // On some platforms, close fires without error event
+        reject(new Error(`Process closed with code ${code} instead of error`));
       });
-
-      // Set a timeout in case neither event fires
-      setTimeout(() => {
-        if (!errorOccurred) {
-          reject(new Error('Timeout waiting for error'));
-        }
-      }, 5000);
     });
+
+    const timeoutPromise = new Promise((_, reject) => {
+      // 5 second safety timeout in case error event never fires
+      setTimeout(() => {
+        reject(new Error('Timeout waiting for error'));
+      }, SAFETY_TIMEOUT);
+    });
+
+    const error = await Promise.race([errorPromise, timeoutPromise]);
+    expect(error.code).toBe('ENOENT');
   });
 
   it('should parse valid JSON output', () => {
@@ -100,6 +137,17 @@ describe('Python Process Lifecycle', () => {
     expect(parsed.text).toBe('Hello world');
     expect(parsed.backend).toBe('test');
     expect(parsed.model).toBe('tiny');
+  });
+
+  it('should parse error JSON output', () => {
+    const fixturePath = path.join(__dirname, '../fixtures/test-output-error.json');
+    const jsonContent = fs.readFileSync(fixturePath, 'utf8');
+    const parsed = JSON.parse(jsonContent);
+
+    expect(parsed).toHaveProperty('success');
+    expect(parsed).toHaveProperty('error');
+    expect(parsed.success).toBe(false);
+    expect(parsed.error).toBe('Test error message');
   });
 
   it('should handle malformed JSON output', () => {
