@@ -39,14 +39,12 @@ describe('STT Interactive', () => {
       waitForOutput(electron, /Transcription failed/, 60000)
     ]);
 
+    // Verify transcription occurred
     expect(result).toBeDefined();
-  }, 90000);
 
-  it('should log transcription result or error', () => {
+    // Verify logs contain result or error
     const hasTranscription = output.stderr.includes('Transcription:');
     const hasError = output.stderr.includes('Transcription failed');
-
-    // Either success or failure should be logged
     expect(hasTranscription || hasError).toBe(true);
-  });
+  }, 90000);
 });
