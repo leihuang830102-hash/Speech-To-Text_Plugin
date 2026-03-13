@@ -1,0 +1,25 @@
+{
+  "python": {
+    "path": "python",
+    "sttScript": "./stt/stt.py"
+  },
+  "stt": {
+    "backend": "auto",
+    "modelSize": "tiny",
+    "language": "zh",
+    "maxDuration": 30
+  },
+  "window": {
+    "width": 60,
+    "height": 60,
+    "rememberPosition": true
+  },
+  "logging": {
+    "level": "INFO",
+    "logToFile": true,
+    "maxFileSize": 5242880,
+    "maxFiles": 5,
+    "maxTotalSize": 20971520,
+    "maxAge": 604800
+  }
+}

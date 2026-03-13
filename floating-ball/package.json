@@ -1,0 +1,22 @@
+{
+  "name": "floating-ball-voice",
+  "version": "1.0.0",
+  "description": "Floating ball voice input tool",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:unit": "vitest run tests/unit",
+    "test:integration": "vitest run tests/integration",
+    "build": "electron-builder --win"
+  },
+  "dependencies": {
+    "electron": "^28.0.0",
+    "robotjs": "^0.6.0"
+  },
+  "devDependencies": {
+    "electron-builder": "^24.0.0",
+    "vitest": "^1.0.0"
+  }
+}
