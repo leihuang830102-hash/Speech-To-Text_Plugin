@@ -1,0 +1,107 @@
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+  -webkit-app-region: drag;
+}
+
+body {
+  overflow: hidden;
+  background: transparent;
+}
+
+.ball {
+  width: 60px;
+  height: 60px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  position: relative;
+  -webkit-app-region: no-drag;
+  transition: background-color 0.2s ease;
+}
+
+.ball-inner {
+  z-index: 2;
+}
+
+.icon {
+  font-size: 24px;
+  user-select: none;
+}
+
+/* States */
+.ball.idle {
+  background: linear-gradient(135deg, #4a90d9 0%, #357abd 100%);
+  box-shadow: 0 4px 15px rgba(74, 144, 217, 0.4);
+}
+
+.ball.recording {
+  background: linear-gradient(135deg, #e74c3c 0%, #c0392b 100%);
+  box-shadow: 0 4px 15px rgba(231, 76, 60, 0.4);
+  animation: pulse 1s ease-in-out infinite;
+}
+
+.ball.processing {
+  background: linear-gradient(135deg, #f39c12 0%, #e67e22 100%);
+  box-shadow: 0 4px 15px rgba(243, 156, 18, 0.4);
+  animation: spin 1s linear infinite;
+}
+
+.ball.success {
+  background: linear-gradient(135deg, #27ae60 0%, #229954 100%);
+  box-shadow: 0 4px 15px rgba(39, 174, 96, 0.4);
+}
+
+.ball.error {
+  background: linear-gradient(135deg, #7f8c8d 0%, #6c7a7a 100%);
+  box-shadow: 0 4px 15px rgba(127, 140, 141, 0.4);
+}
+
+/* Animations */
+@keyframes pulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.1); }
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+/* Ripple effect */
+.ripple {
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, 0.5);
+  opacity: 0;
+  z-index: 1;
+}
+
+.ball.recording .ripple {
+  animation: ripple 1.5s ease-out infinite;
+}
+
+@keyframes ripple {
+  0% {
+    transform: scale(1);
+    opacity: 0.6;
+  }
+  100% {
+    transform: scale(1.8);
+    opacity: 0;
+  }
+}
+
+/* Hover effect */
+.ball:hover {
+  filter: brightness(1.1);
+}
+
+.ball:active {
+  transform: scale(0.95);
+}
