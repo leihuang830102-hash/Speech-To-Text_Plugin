@@ -51,7 +51,7 @@ describe('Python Bridge Integration', () => {
 
       expect(result).toHaveProperty('available_backends');
       expect(Array.isArray(result.available_backends)).toBe(true);
-    });
+    }, 30000); // 30s timeout - ML library loading is slow
   });
 
   describe('STT Transcription', () => {
@@ -136,7 +136,7 @@ describe('Python Bridge Integration', () => {
       });
 
       expect(result.success).toBe(false);
-    }, 30000); // 30s timeout
+    }, 60000); // 60s timeout - ML library loading + model init is slow
   });
 
   describe('JSON Protocol', () => {

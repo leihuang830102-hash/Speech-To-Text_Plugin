@@ -16,13 +16,13 @@ describe('STT Integration', () => {
     const result = await runPython(sttScript, ['--list-backends']);
     expect(result).toHaveProperty('available_backends');
     expect(Array.isArray(result.available_backends)).toBe(true);
-  });
+  }, 30000); // 30s timeout - ML library loading is slow
 
   it('should return valid JSON structure for list-backends', async () => {
     const result = await runPython(sttScript, ['--list-backends']);
     expect(result).toHaveProperty('available_backends');
     expect(Array.isArray(result.available_backends)).toBe(true);
-  });
+  }, 30000); // 30s timeout - ML library loading is slow
 
   it('should handle invalid audio file gracefully', async () => {
     const result = await runPython(sttScript, [
@@ -34,7 +34,7 @@ describe('STT Integration', () => {
 
     expect(result.success).toBe(false);
     expect(result).toHaveProperty('error');
-  }, 30000); // 30s timeout
+  }, 60000); // 60s timeout - ML library loading + model init is slow
 });
 
 function runPython(script, args) {
@@ -57,10 +57,10 @@ function runPython(script, args) {
 
     proc.on('error', reject);
 
-    // Timeout after 30s for transcription operations
+    // Timeout after 60s for transcription operations (ML library loading is slow)
     setTimeout(() => {
       proc.kill();
       reject(new Error('Timeout'));
-    }, 30000);
+    }, 60000);
   });
 }
