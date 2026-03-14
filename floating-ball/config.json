@@ -1,13 +1,18 @@
 {
   "python": {
     "path": "python",
-    "sttScript": "../src/scripts/stt.py"
+    "sttScript": "../src/scripts/stt.py",
+    "recordScript": "./record.py"
   },
   "stt": {
     "backend": "whisper",
     "modelSize": "tiny",
     "language": "zh",
     "maxDuration": 30
+  },
+  "websocket": {
+    "enabled": true,
+    "url": "ws://127.0.0.1:8765"
   },
   "window": {
     "width": 60,

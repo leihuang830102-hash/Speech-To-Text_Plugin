@@ -5,6 +5,7 @@ from typing import Dict, List, Optional, Type
 from .base import BaseBackend
 from .faster_whisper import FasterWhisperBackend
 from .doubao import DoubaoBackend
+from .whisper import WhisperBackend
 
 
 class BackendManager:
@@ -14,6 +15,7 @@ class BackendManager:
     _backend_classes: Dict[str, Type[BaseBackend]] = {
         "faster-whisper": FasterWhisperBackend,
         "doubao-cloud": DoubaoBackend,
+        "whisper": WhisperBackend,
     }
 
     def __init__(self, config: dict):

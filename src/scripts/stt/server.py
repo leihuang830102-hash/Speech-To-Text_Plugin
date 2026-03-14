@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Optional
 
 # Add parent to path for imports
-sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from stt.config import load_config, DEFAULT_CONFIG
 from stt.logger import setup_logger, get_logger, set_log_level
@@ -204,15 +204,17 @@ async def main():
     config = load_config()
     server = STTServer(config)
 
-    # Handle signals
+    # Handle signals (Unix only)
     loop = asyncio.get_event_loop()
 
     def signal_handler():
         server.logger.info("Shutdown signal received")
         server._running = False
 
-    for sig in (signal.SIGINT, signal.SIGTERM):
-        loop.add_signal_handler(sig, signal_handler)
+    # Windows doesn't support add_signal_handler
+    if sys.platform != 'win32':
+        for sig in (signal.SIGINT, signal.SIGTERM):
+            loop.add_signal_handler(sig, signal_handler)
 
     await server.run_forever()
     await server.stop()

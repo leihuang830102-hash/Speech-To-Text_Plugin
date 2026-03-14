@@ -4,16 +4,20 @@
     "port": 8765
   },
   "stt": {
-    "defaultBackend": "faster-whisper",
+    "defaultBackend": "whisper",
     "backends": {
       "doubao-cloud": {
         "enabled": true,
         "url": "wss://openspeech.bytedance.com/api/v3/sauc/bigmodel_nostream"
       },
       "faster-whisper": {
-        "enabled": true,
+        "enabled": false,
         "model": "tiny",
         "device": "auto"
+      },
+      "whisper": {
+        "enabled": true,
+        "model": "tiny"
       },
       "moonshine-onnx": {
         "enabled": true,

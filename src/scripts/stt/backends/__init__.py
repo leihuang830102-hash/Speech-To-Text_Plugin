@@ -5,10 +5,12 @@ from .base import BaseBackend
 from .manager import BackendManager
 from .faster_whisper import FasterWhisperBackend
 from .doubao import DoubaoBackend
+from .whisper import WhisperBackend
 
 __all__ = [
     "BaseBackend",
     "BackendManager",
     "FasterWhisperBackend",
     "DoubaoBackend",
+    "WhisperBackend",
 ]

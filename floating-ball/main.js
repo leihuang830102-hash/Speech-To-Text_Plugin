@@ -1,9 +1,10 @@
 // main.js - Floating Ball Main Process
-// With Python warm-up detection
+// With WebSocket STT support for faster response
 const { app, BrowserWindow, ipcMain } = require('electron');
 const path = require('path');
 const { spawn } = require('child_process');
 const fs = require('fs');
+const WebSocket = require('ws');
 
 // ============================================================================
 // Configuration
@@ -46,6 +47,79 @@ function log(level, module, message) {
     if (!fs.existsSync(logsDir)) fs.mkdirSync(logsDir, { recursive: true });
     fs.appendFileSync(path.join(logsDir, 'app.log'), line + '\n');
   }
+}
+
+// ============================================================================
+// WebSocket Connection
+// ============================================================================
+
+let wsClient = null;
+let wsConnected = false;
+
+function connectWebSocket() {
+  if (!config.websocket?.enabled) return;
+
+  const url = config.websocket.url || 'ws://127.0.0.1:8765';
+  log('INFO', 'ws', `Connecting to WebSocket: ${url}`);
+
+  try {
+    wsClient = new WebSocket(url);
+
+    wsClient.on('open', () => {
+      wsConnected = true;
+      log('INFO', 'ws', 'WebSocket connected');
+    });
+
+    wsClient.on('close', () => {
+      wsConnected = false;
+      log('INFO', 'ws', 'WebSocket disconnected');
+      // Reconnect after 3 seconds
+      setTimeout(connectWebSocket, 3000);
+    });
+
+    wsClient.on('error', (err) => {
+      log('ERROR', 'ws', `WebSocket error: ${err.message}`);
+    });
+  } catch (e) {
+    log('ERROR', 'ws', `Failed to connect: ${e.message}`);
+  }
+}
+
+function sendAudioToServer(audioData) {
+  return new Promise((resolve, reject) => {
+    if (!wsConnected || !wsClient) {
+      reject(new Error('WebSocket not connected'));
+      return;
+    }
+
+    const handler = (data) => {
+      try {
+        const msg = JSON.parse(data.toString());
+        if (msg.event === 'result') {
+          wsClient.off('message', handler);
+          resolve(msg.text);
+        } else if (msg.event === 'error') {
+          wsClient.off('message', handler);
+          reject(new Error(msg.message));
+        }
+      } catch (e) {
+        // Ignore parse errors, wait for next message
+      }
+    };
+
+    wsClient.on('message', handler);
+
+    // Send start_recording then audio data
+    wsClient.send(JSON.stringify({ action: 'start_recording', language: config.stt.language }));
+    wsClient.send(audioData);
+    wsClient.send(JSON.stringify({ action: 'stop_recording' }));
+
+    // Timeout
+    setTimeout(() => {
+      wsClient.off('message', handler);
+      reject(new Error('WebSocket timeout'));
+    }, config.timeout?.maxProcessingTime || 60000);
+  });
 }
 
 // ============================================================================
@@ -206,12 +280,122 @@ function cleanupPythonProcess() {
   }
 }
 
+// WebSocket mode: Record audio with Python, transcribe via WebSocket
+function spawnRecordingOnly() {
+  if (pythonProcess) {
+    log('WARN', 'main', 'Python process already running, killing old one');
+    cleanupPythonProcess();
+  }
+
+  const scriptPath = path.join(__dirname, config.python.recordScript || './record.py');
+  const args = [
+    scriptPath,
+    '--duration', String(config.stt.maxDuration),
+    '--silence-duration', '1.5'
+  ];
+
+  log('INFO', 'main', `Starting recorder: ${config.python.path} ${args.join(' ')}`);
+
+  const pythonEnv = {
+    ...process.env,
+    KMP_DUPLICATE_LIB_OK: 'TRUE'
+  };
+
+  pythonProcess = spawn(config.python.path, args, { env: pythonEnv });
+  let audioBuffer = [];
+
+  pythonProcess.stdout.on('data', (data) => {
+    // Collect binary audio data
+    audioBuffer.push(data);
+  });
+
+  pythonProcess.stderr.on('data', (data) => {
+    const stderrText = data.toString().trim();
+    log('DEBUG', 'main', `Recorder stderr: ${stderrText}`);
+
+    if (stderrText.includes('Recording...') && state === 'warming') {
+      log('INFO', 'main', 'Recorder is now recording');
+      setState('recording');
+    }
+  });
+
+  pythonProcess.on('close', async (code) => {
+    log('INFO', 'main', `Recorder exited with code ${code}`);
+    clearTimeout(processTimeout);
+    processTimeout = null;
+    pythonProcess = null;
+
+    if (code === 0 && audioBuffer.length > 0) {
+      // Combine audio chunks
+      const audioData = Buffer.concat(audioBuffer);
+      log('INFO', 'main', `Recorded ${audioData.length} bytes, sending to WebSocket`);
+
+      try {
+        const text = await sendAudioToServer(audioData);
+        await handleTranscriptionResult(text);
+      } catch (e) {
+        log('ERROR', 'main', `WebSocket transcription failed: ${e.message}`);
+        setState('error');
+        scheduleReset(1000);
+        restoreWindow();
+      }
+    } else {
+      log('ERROR', 'main', 'Recording failed or no audio');
+      setState('error');
+      scheduleReset(1000);
+      restoreWindow();
+    }
+  });
+
+  pythonProcess.on('error', (err) => {
+    log('ERROR', 'main', `Failed to start recorder: ${err.message}`);
+    cleanupPythonProcess();
+    setState('error');
+    scheduleReset(1000);
+  });
+
+  // Timeout
+  const timeout = config.timeout?.maxProcessingTime || 60000;
+  processTimeout = setTimeout(() => {
+    log('WARN', 'main', `Recorder timed out after ${timeout}ms`);
+    cleanupPythonProcess();
+    setState('error');
+    scheduleReset(1000);
+  }, timeout);
+}
+
+async function handleTranscriptionResult(text) {
+  // Return focus BEFORE inserting text
+  returnFocusToPreviousApp();
+
+  // Wait for focus to switch (longer on Windows due to hide)
+  const focusDelay = process.platform === 'win32' ? 400 : 200;
+  await new Promise(resolve => setTimeout(resolve, focusDelay));
+
+  if (text && text.trim()) {
+    log('INFO', 'main', `Transcription: "${text}"`);
+    await insertText(text);
+    setState('success');
+    scheduleReset(500);
+  } else {
+    log('INFO', 'main', 'Transcription succeeded but no text');
+    setState('success');
+    scheduleReset(500);
+  }
+
+  // Restore window after everything is done (on Windows)
+  if (process.platform === 'win32') {
+    restoreWindow();
+  }
+}
+
 async function handlePythonOutput(output) {
   try {
     if (!output.trim()) {
       log('ERROR', 'main', 'Python produced no output');
       setState('error');
       scheduleReset(1000);
+      restoreWindow();
       return;
     }
 
@@ -220,8 +404,9 @@ async function handlePythonOutput(output) {
     // Return focus BEFORE inserting text
     returnFocusToPreviousApp();
 
-    // Wait longer for focus to switch (200ms instead of 100ms)
-    await new Promise(resolve => setTimeout(resolve, 200));
+    // Wait longer for focus to switch
+    const focusDelay = process.platform === 'win32' ? 400 : 200;
+    await new Promise(resolve => setTimeout(resolve, focusDelay));
 
     if (result.success && result.text && result.text.trim()) {
       log('INFO', 'main', `Transcription: "${result.text}"`);
@@ -242,6 +427,11 @@ async function handlePythonOutput(output) {
     returnFocusToPreviousApp();
     setState('error');
     scheduleReset(1000);
+  }
+
+  // Restore window after everything is done (on Windows)
+  if (process.platform === 'win32') {
+    restoreWindow();
   }
 }
 
@@ -272,8 +462,22 @@ async function insertText(text) {
 
 function returnFocusToPreviousApp() {
   if (mainWindow && !mainWindow.isDestroyed()) {
-    mainWindow.blur();
+    // On Windows, blur() alone is not reliable
+    // Use hide() to force focus switch - window will be shown after text insertion
+    if (process.platform === 'win32') {
+      mainWindow.hide();
+      log('DEBUG', 'main', 'Window hidden for focus switch');
+    } else {
+      mainWindow.blur();
+    }
     log('DEBUG', 'main', 'Focus returned to previous application');
+  }
+}
+
+function restoreWindow() {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.show();
+    log('DEBUG', 'main', 'Window restored');
   }
 }
 
@@ -301,9 +505,17 @@ ipcMain.on('start-recording', () => {
     return;
   }
 
-  // Show "warming" state first - Python needs time to start
-  setState('warming');
-  spawnPythonProcess();
+  // Use WebSocket mode if enabled and connected
+  if (config.websocket?.enabled && wsConnected) {
+    log('INFO', 'main', 'Using WebSocket mode for STT');
+    setState('recording'); // No warmup needed - model already loaded
+    spawnRecordingOnly();
+  } else {
+    // Fallback to legacy mode (with warmup)
+    log('INFO', 'main', 'Using legacy mode for STT');
+    setState('warming');
+    spawnPythonProcess();
+  }
 });
 
 ipcMain.on('stop-recording', () => {
@@ -329,10 +541,17 @@ ipcMain.on('get-state', (event) => {
 // App Lifecycle
 // ============================================================================
 
-app.whenReady().then(createWindow);
+app.whenReady().then(() => {
+  createWindow();
+  connectWebSocket();
+});
 
 app.on('window-all-closed', () => {
   cleanupPythonProcess();
+  if (wsClient) {
+    wsClient.close();
+    wsClient = null;
+  }
   if (process.platform !== 'darwin') {
     app.quit();
   }
