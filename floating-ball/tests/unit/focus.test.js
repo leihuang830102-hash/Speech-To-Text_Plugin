@@ -30,3 +30,23 @@ describe('Floating Ball Focus Configuration', () => {
     expect(mainContent).not.toMatch(/LeftAlt.*Tab|Tab.*LeftAlt/);
   });
 });
+
+// Integration tests for manual verification
+// These tests require automation tools like Playwright or nut-js
+
+describe('Integration: Focus-Free Behavior', () => {
+  it.skip('should keep focus on original app during recording', () => {
+    // Manual test:
+    // 1. Open Notepad
+    // 2. Click floating ball
+    // 3. Verify Notepad still has focus (cursor blinks)
+    // This test requires Playwright/nut-js for automation
+  });
+
+  it.skip('should insert text without visible flash', () => {
+    // Manual test:
+    // 1. Record and transcribe
+    // 2. Verify no Alt+Tab flash appears
+    // This test requires visual verification or screen recording analysis
+  });
+});
