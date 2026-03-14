@@ -16,3 +16,8 @@ Ref/
 
 # Logs
 logs/
+
+# IDE
+.idea/
+.vscode/
+*.swp
