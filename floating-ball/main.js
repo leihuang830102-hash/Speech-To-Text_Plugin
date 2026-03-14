@@ -376,7 +376,13 @@ async function handleTranscriptionResult(text) {
 
   if (text && text.trim()) {
     log('INFO', 'main', `Transcription: "${text}"`);
-    await insertText(text);
+    log('DEBUG', 'main', 'About to call insertText...');
+    try {
+      await insertText(text);
+      log('DEBUG', 'main', 'insertText completed');
+    } catch (e) {
+      log('ERROR', 'main', `insertText failed: ${e.message}`);
+    }
     setState('success');
     scheduleReset(500);
   } else {
