@@ -1,0 +1,32 @@
+{
+  "server": {
+    "host": "127.0.0.1",
+    "port": 8765
+  },
+  "stt": {
+    "defaultBackend": "faster-whisper",
+    "backends": {
+      "doubao-cloud": {
+        "enabled": true,
+        "url": "wss://openspeech.bytedance.com/api/v3/sauc/bigmodel_nostream"
+      },
+      "faster-whisper": {
+        "enabled": true,
+        "model": "tiny",
+        "device": "auto"
+      },
+      "moonshine-onnx": {
+        "enabled": true,
+        "model": "tiny"
+      }
+    }
+  },
+  "logging": {
+    "level": "INFO",
+    "dir": "./logs",
+    "maxFileSize": 5242880,
+    "maxFiles": 5,
+    "maxTotalSize": 20971520,
+    "maxAge": 604800
+  }
+}

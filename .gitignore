@@ -7,3 +7,12 @@ __pycache__/
 .DS_Store
 *.log
 .worktrees/
+
+# Secrets
+.env
+
+# Reference files with sensitive data
+Ref/
+
+# Logs
+logs/
