@@ -452,6 +452,9 @@ async function insertText(text) {
     // Copy text to clipboard
     clipboard.writeText(text);
 
+    // Small delay to ensure clipboard is ready before paste
+    await new Promise(resolve => setTimeout(resolve, 50));
+
     // Paste using Ctrl+V
     await keyboard.pressKey(Key.LeftControl, Key.V);
     await keyboard.releaseKey(Key.LeftControl, Key.V);
