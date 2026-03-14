@@ -463,27 +463,9 @@ async function insertText(text) {
 }
 
 async function returnFocusToPreviousApp() {
-  if (mainWindow && !mainWindow.isDestroyed()) {
-    // On Windows, blur() alone is not reliable
-    // Use hide() + Alt+Tab to force focus switch to previous app
-    if (process.platform === 'win32') {
-      mainWindow.hide();
-      log('DEBUG', 'main', 'Window hidden for focus switch');
-
-      // Simulate Alt+Tab to restore focus to previous application
-      try {
-        const { keyboard, Key } = require('@nut-tree/nut-js');
-        await keyboard.pressKey(Key.LeftAlt, Key.Tab);
-        await keyboard.releaseKey(Key.LeftAlt, Key.Tab);
-        log('DEBUG', 'main', 'Alt+Tab sent to restore focus');
-      } catch (e) {
-        log('WARN', 'main', `Alt+Tab failed: ${e.message}`);
-      }
-    } else {
-      mainWindow.blur();
-    }
-    log('DEBUG', 'main', 'Focus returned to previous application');
-  }
+  // No-op: window is configured with focusable: false, so it never took focus
+  // This eliminates the need for Alt+Tab which caused window flash on Windows
+  log('DEBUG', 'main', 'Focus management: no-op (focusable: false)');
 }
 
 function restoreWindow() {
