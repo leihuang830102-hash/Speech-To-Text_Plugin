@@ -160,6 +160,7 @@ function createWindow() {
     alwaysOnTop: true,
     skipTaskbar: true,
     resizable: false,
+    hasShadow: false,  // Prevent ghost images on Windows during drag
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,

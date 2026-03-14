@@ -15,12 +15,23 @@ import json
 import sys
 import os
 import tempfile
+import signal
 from pathlib import Path
 import warnings
 
 warnings.filterwarnings("ignore")
 
 SAMPLE_RATE = 16000
+
+# Global flag for signal handling
+_stop_recording = False
+
+
+def signal_handler(signum, frame):
+    """Handle SIGTERM/SIGINT to gracefully stop recording."""
+    global _stop_recording
+    print("Signal received, stopping recording...", file=sys.stderr, flush=True)
+    _stop_recording = True
 
 
 def get_available_backend():
@@ -55,6 +66,7 @@ def record_audio(
     duration: float, silence_threshold: float = 0.01, silence_duration: float = 1.5
 ):
     """Record audio from microphone with silence detection."""
+    global _stop_recording
     import sounddevice as sd
     import soundfile as sf
     import numpy as np
@@ -71,6 +83,11 @@ def record_audio(
 
     with sd.InputStream(samplerate=SAMPLE_RATE, channels=1, dtype="float32") as stream:
         for _ in range(max_chunks):
+            # Check if we should stop (signal received)
+            if _stop_recording:
+                print("Recording stopped by signal.", file=sys.stderr, flush=True)
+                break
+
             chunk, _ = stream.read(chunk_samples)
             audio_chunks.append(chunk)
 
@@ -88,6 +105,9 @@ def record_audio(
                 break
 
     print("Recording stopped.", file=sys.stderr, flush=True)
+
+    if len(audio_chunks) == 0:
+        return None
 
     audio = np.concatenate(audio_chunks)
 
@@ -132,6 +152,12 @@ def transcribe_faster_whisper(
 
 
 def main():
+    global _stop_recording
+
+    # Register signal handlers for graceful termination
+    signal.signal(signal.SIGTERM, signal_handler)
+    signal.signal(signal.SIGINT, signal_handler)
+
     parser = argparse.ArgumentParser(description="Speech-to-Text for OpenCode Doubao")
     parser.add_argument(
         "--backend",
@@ -193,6 +219,15 @@ def main():
         else:
             audio_path = record_audio(args.duration)
             temp_file = True
+
+        # Handle case where no audio was recorded (e.g., stopped immediately)
+        if audio_path is None:
+            print(
+                json.dumps(
+                    {"success": True, "text": "", "backend": backend, "model": args.model}
+                )
+            )
+            return
 
         if backend == "moonshine":
             text = transcribe_moonshine(audio_path, args.model)
