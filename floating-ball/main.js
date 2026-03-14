@@ -366,7 +366,7 @@ function spawnRecordingOnly() {
 
 async function handleTranscriptionResult(text) {
   // Return focus BEFORE inserting text
-  returnFocusToPreviousApp();
+  await returnFocusToPreviousApp();
 
   // Wait for focus to switch (longer on Windows due to hide)
   const focusDelay = process.platform === 'win32' ? 400 : 200;
@@ -402,7 +402,7 @@ async function handlePythonOutput(output) {
     const result = JSON.parse(output);
 
     // Return focus BEFORE inserting text
-    returnFocusToPreviousApp();
+    await returnFocusToPreviousApp();
 
     // Wait longer for focus to switch
     const focusDelay = process.platform === 'win32' ? 400 : 200;
@@ -424,7 +424,7 @@ async function handlePythonOutput(output) {
     }
   } catch (e) {
     log('ERROR', 'main', `Failed to parse Python output: ${e.message}`);
-    returnFocusToPreviousApp();
+    await returnFocusToPreviousApp();
     setState('error');
     scheduleReset(1000);
   }
@@ -460,13 +460,23 @@ async function insertText(text) {
   }
 }
 
-function returnFocusToPreviousApp() {
+async function returnFocusToPreviousApp() {
   if (mainWindow && !mainWindow.isDestroyed()) {
     // On Windows, blur() alone is not reliable
-    // Use hide() to force focus switch - window will be shown after text insertion
+    // Use hide() + Alt+Tab to force focus switch to previous app
     if (process.platform === 'win32') {
       mainWindow.hide();
       log('DEBUG', 'main', 'Window hidden for focus switch');
+
+      // Simulate Alt+Tab to restore focus to previous application
+      try {
+        const { keyboard, Key } = require('@nut-tree/nut-js');
+        await keyboard.pressKey(Key.LeftAlt, Key.Tab);
+        await keyboard.releaseKey(Key.LeftAlt, Key.Tab);
+        log('DEBUG', 'main', 'Alt+Tab sent to restore focus');
+      } catch (e) {
+        log('WARN', 'main', `Alt+Tab failed: ${e.message}`);
+      }
     } else {
       mainWindow.blur();
     }

@@ -6,6 +6,7 @@ from .base import BaseBackend
 from .faster_whisper import FasterWhisperBackend
 from .doubao import DoubaoBackend
 from .whisper import WhisperBackend
+from ..utils import to_simplified_chinese
 
 
 class BackendManager:
@@ -82,7 +83,13 @@ class BackendManager:
         if backend is None:
             raise RuntimeError(f"Backend {self._current_backend} not found")
 
-        return await backend.transcribe(audio_data, language)
+        text = await backend.transcribe(audio_data, language)
+
+        # Convert Traditional Chinese to Simplified Chinese
+        if language == "zh":
+            text = to_simplified_chinese(text)
+
+        return text
 
     async def cleanup(self) -> None:
         """Cleanup all backends."""
