@@ -161,6 +161,7 @@ function createWindow() {
     skipTaskbar: true,
     resizable: false,
     hasShadow: false,  // Prevent ghost images on Windows during drag
+    focusable: false,  // Window never takes focus - eliminates Alt+Tab flash
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
