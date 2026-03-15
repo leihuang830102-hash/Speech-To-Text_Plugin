@@ -177,8 +177,12 @@ class DoubaoBackend(BaseBackend):
 
         return result
 
-    async def transcribe(self, audio_data: bytes, language: str = "zh") -> str:
-        """Transcribe audio using Doubao Cloud API."""
+    async def transcribe(self, audio_data: bytes, language: str = "zh") -> tuple:
+        """Transcribe audio using Doubao Cloud API.
+
+        Returns:
+            Tuple of (text, detected_language)
+        """
         aiohttp = await self._get_aiohttp()
 
         headers = {
@@ -221,4 +225,5 @@ class DoubaoBackend(BaseBackend):
                     except asyncio.TimeoutError:
                         pass
 
-        return result_text.strip()
+        # Doubao doesn't return detected language, use input language
+        return result_text.strip(), language

@@ -3,7 +3,7 @@
 
 import tempfile
 import os
-from typing import Optional
+from typing import Optional, Tuple
 from .base import BaseBackend
 
 
@@ -45,8 +45,12 @@ class FasterWhisperBackend(BaseBackend):
         except Exception as e:
             return False
 
-    async def transcribe(self, audio_data: bytes, language: str = "zh") -> str:
-        """Transcribe audio using faster-whisper."""
+    async def transcribe(self, audio_data: bytes, language: str = "zh") -> Tuple[str, str]:
+        """Transcribe audio using faster-whisper.
+
+        Returns:
+            Tuple of (text, detected_language)
+        """
         if not self._initialized:
             await self.initialize()
 
@@ -56,8 +60,11 @@ class FasterWhisperBackend(BaseBackend):
             temp_file.write(audio_data)
             temp_file.close()
 
-            segments, _ = self.model.transcribe(temp_file.name, language=language)
+            # Pass None for auto-detect
+            lang_param = None if language == "auto" else language
+            segments, info = self.model.transcribe(temp_file.name, language=lang_param)
             text = " ".join([segment.text for segment in segments]).strip()
-            return text
+            detected_lang = info.language if hasattr(info, 'language') else language
+            return text, detected_lang
         finally:
             os.unlink(temp_file.name)

@@ -50,6 +50,127 @@ function log(level, module, message) {
 }
 
 // ============================================================================
+// STT Server Management
+// ============================================================================
+
+let serverProcess = null;
+let serverStarting = false;
+let serverCheckAttempts = 0;
+const MAX_SERVER_CHECK_ATTEMPTS = 10;
+
+function checkServerRunning() {
+  return new Promise((resolve) => {
+    const testUrl = config.websocket?.url || 'ws://127.0.0.1:8765';
+    const testWs = new WebSocket(testUrl, { handshakeTimeout: 2000 });
+
+    testWs.on('open', () => {
+      testWs.close();
+      resolve(true);
+    });
+
+    testWs.on('error', () => {
+      resolve(false);
+    });
+
+    // Timeout fallback
+    setTimeout(() => {
+      testWs.terminate();
+      resolve(false);
+    }, 2000);
+  });
+}
+
+function startSTTServer() {
+  return new Promise((resolve, reject) => {
+    if (serverProcess || serverStarting) {
+      resolve(true);
+      return;
+    }
+
+    const serverScript = path.resolve(__dirname, config.python.serverScript || '../src/scripts/stt/server.py');
+    log('INFO', 'server', `Starting STT server: ${serverScript}`);
+
+    serverStarting = true;
+
+    const env = {
+      ...process.env,
+      KMP_DUPLICATE_LIB_OK: 'TRUE',
+      PYTHONIOENCODING: 'utf-8'
+    };
+
+    serverProcess = spawn(config.python.path, [serverScript], {
+      cwd: path.resolve(__dirname, '..'),
+      env: env,
+      stdio: ['ignore', 'pipe', 'pipe']
+    });
+
+    serverProcess.stdout.on('data', (data) => {
+      log('DEBUG', 'server', `stdout: ${data.toString().trim()}`);
+    });
+
+    serverProcess.stderr.on('data', (data) => {
+      log('DEBUG', 'server', `stderr: ${data.toString().trim()}`);
+    });
+
+    serverProcess.on('error', (err) => {
+      log('ERROR', 'server', `Failed to start: ${err.message}`);
+      serverProcess = null;
+      serverStarting = false;
+      reject(err);
+    });
+
+    serverProcess.on('exit', (code) => {
+      log('INFO', 'server', `Server exited with code ${code}`);
+      serverProcess = null;
+      serverStarting = false;
+    });
+
+    // Wait for server to be ready
+    let attempts = 0;
+    const checkInterval = setInterval(async () => {
+      attempts++;
+      const running = await checkServerRunning();
+      if (running) {
+        clearInterval(checkInterval);
+        serverStarting = false;
+        log('INFO', 'server', 'STT server is ready');
+        resolve(true);
+      } else if (attempts >= 20) {
+        clearInterval(checkInterval);
+        serverStarting = false;
+        log('ERROR', 'server', 'STT server failed to start within timeout');
+        reject(new Error('Server startup timeout'));
+      }
+    }, 500);
+  });
+}
+
+async function ensureServerRunning() {
+  const running = await checkServerRunning();
+  if (running) {
+    log('INFO', 'server', 'STT server already running');
+    return true;
+  }
+
+  log('INFO', 'server', 'STT server not running, starting...');
+  try {
+    await startSTTServer();
+    return true;
+  } catch (e) {
+    log('ERROR', 'server', `Failed to start server: ${e.message}`);
+    return false;
+  }
+}
+
+function cleanupServer() {
+  if (serverProcess) {
+    log('INFO', 'server', 'Stopping STT server');
+    serverProcess.kill();
+    serverProcess = null;
+  }
+}
+
+// ============================================================================
 // WebSocket Connection
 // ============================================================================
 
@@ -67,6 +188,7 @@ function connectWebSocket() {
 
     wsClient.on('open', () => {
       wsConnected = true;
+      serverCheckAttempts = 0; // Reset attempts on successful connection
       log('INFO', 'ws', 'WebSocket connected');
     });
 
@@ -77,8 +199,16 @@ function connectWebSocket() {
       setTimeout(connectWebSocket, 3000);
     });
 
-    wsClient.on('error', (err) => {
+    wsClient.on('error', async (err) => {
       log('ERROR', 'ws', `WebSocket error: ${err.message}`);
+      // If connection refused, try starting the server
+      if (err.code === 'ECONNREFUSED') {
+        serverCheckAttempts++;
+        if (serverCheckAttempts <= 3) {
+          log('INFO', 'ws', 'Connection refused, attempting to start server...');
+          await ensureServerRunning();
+        }
+      }
     });
   } catch (e) {
     log('ERROR', 'ws', `Failed to connect: ${e.message}`);
@@ -648,13 +778,17 @@ ipcMain.on('get-state', (event) => {
 // App Lifecycle
 // ============================================================================
 
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
   createWindow();
+
+  // Ensure STT server is running before connecting WebSocket
+  await ensureServerRunning();
   connectWebSocket();
 });
 
 app.on('window-all-closed', () => {
   cleanupPythonProcess();
+  cleanupServer();
   if (wsClient) {
     wsClient.close();
     wsClient = null;
@@ -672,4 +806,5 @@ app.on('activate', () => {
 
 app.on('before-quit', () => {
   cleanupPythonProcess();
+  cleanupServer();
 });

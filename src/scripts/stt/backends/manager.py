@@ -83,10 +83,10 @@ class BackendManager:
         if backend is None:
             raise RuntimeError(f"Backend {self._current_backend} not found")
 
-        text = await backend.transcribe(audio_data, language)
+        text, detected_lang = await backend.transcribe(audio_data, language)
 
-        # Convert Traditional Chinese to Simplified Chinese
-        if language == "zh":
+        # Only convert Traditional Chinese to Simplified if detected language is Chinese
+        if detected_lang == "zh" or detected_lang.startswith("zh-"):
             text = to_simplified_chinese(text)
 
         return text

@@ -2,12 +2,13 @@
   "python": {
     "path": "python",
     "sttScript": "../src/scripts/stt.py",
-    "recordScript": "./record.py"
+    "recordScript": "./record.py",
+    "serverScript": "../src/scripts/stt/server.py"
   },
   "stt": {
     "backend": "whisper",
-    "modelSize": "tiny",
-    "language": "zh",
+    "modelSize": "small",
+    "language": "auto",
     "maxDuration": 30
   },
   "websocket": {

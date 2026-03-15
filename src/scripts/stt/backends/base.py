@@ -2,7 +2,7 @@
 """Base class for STT backends."""
 
 from abc import ABC, abstractmethod
-from typing import Optional
+from typing import Optional, Tuple
 import asyncio
 
 
@@ -21,7 +21,7 @@ class BaseBackend(ABC):
         pass
 
     @abstractmethod
-    async def transcribe(self, audio_data: bytes, language: str = "zh") -> str:
+    async def transcribe(self, audio_data: bytes, language: str = "zh") -> Tuple[str, str]:
         """
         Transcribe audio data to text.
 
@@ -30,7 +30,7 @@ class BaseBackend(ABC):
             language: Language code (zh, en, etc.)
 
         Returns:
-            Transcribed text string
+            Tuple of (transcribed text, detected language code)
         """
         pass
 

@@ -3,7 +3,7 @@
 
 import tempfile
 import os
-from typing import Optional
+from typing import Optional, Tuple
 from .base import BaseBackend
 
 
@@ -41,8 +41,16 @@ class WhisperBackend(BaseBackend):
             print(f"Whisper initialization error: {e}")
             return False
 
-    async def transcribe(self, audio_data: bytes, language: str = "zh") -> str:
-        """Transcribe audio using whisper."""
+    async def transcribe(self, audio_data: bytes, language: str = "zh") -> Tuple[str, str]:
+        """Transcribe audio using whisper.
+
+        Args:
+            audio_data: WAV audio bytes
+            language: Language code ('zh', 'en', 'auto' for auto-detect)
+
+        Returns:
+            Tuple of (text, detected_language)
+        """
         if not self._initialized:
             await self.initialize()
 
@@ -52,8 +60,12 @@ class WhisperBackend(BaseBackend):
             temp_file.write(audio_data)
             temp_file.close()
 
-            result = self.model.transcribe(temp_file.name, language=language)
-            return result.get("text", "").strip()
+            # Pass None for auto-detect, otherwise use specified language
+            lang_param = None if language == "auto" else language
+            result = self.model.transcribe(temp_file.name, language=lang_param)
+            text = result.get("text", "").strip()
+            detected_lang = result.get("language", language)
+            return text, detected_lang
         finally:
             os.unlink(temp_file.name)
 

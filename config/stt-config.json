@@ -17,7 +17,7 @@
       },
       "whisper": {
         "enabled": true,
-        "model": "tiny"
+        "model": "small"
       },
       "moonshine-onnx": {
         "enabled": true,
