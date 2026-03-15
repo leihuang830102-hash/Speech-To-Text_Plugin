@@ -7,7 +7,7 @@ A standalone Electron desktop application that provides voice-to-text input via 
 - **Floating Ball Interface**: A small, always-on-top floating ball that can be dragged anywhere on screen
 - **Press-and-Hold Recording**: Hold left mouse button to record, release to transcribe
 - **Speech-to-Text**: Supports multiple backends (Moonshine, Faster-Whisper, Whisper)
-- **Auto Text Insertion**: Transcribed text is automatically typed at the cursor position using robotjs
+- **Auto Text Insertion**: Transcribed text is automatically inserted at the cursor position via PowerShell
 - **Visual State Feedback**: Color changes and animations indicate recording/processing/success/error states
 - **Position Memory**: Ball position is remembered between sessions
 - **Log Rotation**: Built-in logging with automatic file rotation

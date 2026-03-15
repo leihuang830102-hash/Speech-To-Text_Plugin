@@ -418,7 +418,12 @@ async function handlePythonOutput(output) {
 
     if (result.success && result.text && result.text.trim()) {
       log('INFO', 'main', `Transcription: "${result.text}"`);
-      await insertText(result.text);
+      try {
+        await insertText(result.text);
+        log('INFO', 'main', 'insertText completed successfully');
+      } catch (e) {
+        log('ERROR', 'main', `insertText threw exception: ${e.message}`);
+      }
       setState('success');
       scheduleReset(500);
     } else if (result.success && (!result.text || !result.text.trim())) {
@@ -448,27 +453,126 @@ async function handlePythonOutput(output) {
 // ============================================================================
 
 async function insertText(text) {
+  const { clipboard } = require('electron');
+  const { execSync } = require('child_process');
+
+  log('INFO', 'insertText', `=== START text insertion ===`);
+  log('INFO', 'insertText', `Text to insert: "${text}" (${text.length} chars)`);
+
+  // DIAGNOSTIC: Check foreground window before insertion
   try {
-    log('DEBUG', 'main', `Inserting text: "${text}"`);
-
-    // Method 1: Use clipboard + paste (faster than typing)
-    const { clipboard } = require('electron');
-    const { keyboard, Key } = require('@nut-tree/nut-js');
-
-    // Copy text to clipboard
-    clipboard.writeText(text);
-
-    // Small delay to ensure clipboard is ready before paste
-    await new Promise(resolve => setTimeout(resolve, 50));
-
-    // Paste using Ctrl+V
-    await keyboard.pressKey(Key.LeftControl, Key.V);
-    await keyboard.releaseKey(Key.LeftControl, Key.V);
-
-    log('INFO', 'main', 'Text inserted successfully via clipboard');
+    const psScript = `Add-Type -MemberDefinition '[DllImport("user32.dll")] public static extern IntPtr GetForegroundWindow();' -Name Win32 -Namespace N; [N.Win32]::GetForegroundWindow()`;
+    const base64Cmd = Buffer.from(psScript, 'utf16le').toString('base64');
+    const hwnd = execSync(`powershell -EncodedCommand ${base64Cmd}`, { encoding: 'utf8', timeout: 2000 }).trim();
+    log('INFO', 'insertText', `Foreground window handle: ${hwnd}`);
   } catch (e) {
-    log('ERROR', 'main', `Failed to insert text: ${e.message}`);
+    log('WARN', 'insertText', `Could not get foreground window: ${e.message}`);
   }
+
+  // === METHOD 1: Electron clipboard + PowerShell SendKeys (Ctrl+V) ===
+  try {
+    log('INFO', 'insertText', `Method 1: Electron clipboard + PowerShell SendKeys...`);
+
+    // Write to clipboard using Electron
+    clipboard.writeText(text);
+    log('INFO', 'insertText', `Clipboard writeText called`);
+
+    // Verify clipboard content
+    await new Promise(resolve => setTimeout(resolve, 50));
+    const clipContent = clipboard.readText();
+    log('INFO', 'insertText', `Clipboard verification: match=${clipContent === text}`);
+
+    if (clipContent !== text) {
+      throw new Error(`Clipboard verification failed`);
+    }
+
+    // Wait for clipboard to stabilize
+    await new Promise(resolve => setTimeout(resolve, 100));
+
+    // Use PowerShell to send Ctrl+V
+    const psScript = `
+Add-Type -AssemblyName System.Windows.Forms
+[System.Windows.Forms.SendKeys]::SendWait("^v")
+`;
+    const base64Cmd = Buffer.from(psScript, 'utf16le').toString('base64');
+    execSync(`powershell -EncodedCommand ${base64Cmd}`, { timeout: 5000 });
+    log('INFO', 'insertText', `Method 1 completed successfully`);
+
+    return; // Success
+  } catch (e) {
+    log('ERROR', 'insertText', `Method 1 failed: ${e.message}`);
+  }
+
+  // === METHOD 2: Pure PowerShell clipboard + SendKeys ===
+  try {
+    log('INFO', 'insertText', `Method 2: Pure PowerShell clipboard + SendKeys...`);
+
+    // Escape single quotes for PowerShell
+    const escapedText = text.replace(/'/g, "''");
+
+    const psScript = `
+Add-Type -AssemblyName System.Windows.Forms
+[System.Windows.Forms.Clipboard]::SetText('${escapedText}')
+Start-Sleep -Milliseconds 50
+[System.Windows.Forms.SendKeys]::SendWait("^v")
+`;
+    const base64Cmd = Buffer.from(psScript, 'utf16le').toString('base64');
+    execSync(`powershell -EncodedCommand ${base64Cmd}`, { timeout: 5000 });
+    log('INFO', 'insertText', `Method 2 completed successfully`);
+
+    return; // Success
+  } catch (e) {
+    log('ERROR', 'insertText', `Method 2 failed: ${e.message}`);
+  }
+
+  // === METHOD 3: PowerShell type string character by character ===
+  try {
+    log('INFO', 'insertText', `Method 3: PowerShell character typing...`);
+
+    // Build SendKeys string with special character escaping
+    let sendKeysStr = '';
+    for (const char of text) {
+      if (char === ' ') {
+        sendKeysStr += ' ';
+      } else if (char === '\n') {
+        sendKeysStr += '{ENTER}';
+      } else if (char === '\t') {
+        sendKeysStr += '{TAB}';
+      } else if (char === '{') {
+        sendKeysStr += '{{}';
+      } else if (char === '}') {
+        sendKeysStr += '{}}';
+      } else if (char === '+') {
+        sendKeysStr += '{+}';
+      } else if (char === '^') {
+        sendKeysStr += '{^}';
+      } else if (char === '%') {
+        sendKeysStr += '{%}';
+      } else if (char === '~') {
+        sendKeysStr += '{~}';
+      } else if (char === '(') {
+        sendKeysStr += '{(}';
+      } else if (char === ')') {
+        sendKeysStr += '{)}';
+      } else {
+        sendKeysStr += char;
+      }
+    }
+
+    const psScript = `
+Add-Type -AssemblyName System.Windows.Forms
+[System.Windows.Forms.SendKeys]::SendWait("${sendKeysStr}")
+`;
+    const base64Cmd = Buffer.from(psScript, 'utf16le').toString('base64');
+    execSync(`powershell -EncodedCommand ${base64Cmd}`, { timeout: 10000 });
+    log('INFO', 'insertText', `Method 3 completed successfully`);
+
+    return; // Success
+  } catch (e) {
+    log('ERROR', 'insertText', `Method 3 failed: ${e.message}`);
+  }
+
+  log('ERROR', 'insertText', `=== ALL METHODS FAILED ===`);
 }
 
 async function returnFocusToPreviousApp() {
