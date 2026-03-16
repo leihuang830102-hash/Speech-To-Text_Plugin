@@ -4,7 +4,7 @@
     "port": 8765
   },
   "stt": {
-    "defaultBackend": "whisper",
+    "defaultBackend": "doubao-cloud",
     "backends": {
       "doubao-cloud": {
         "enabled": true,
@@ -12,16 +12,12 @@
       },
       "faster-whisper": {
         "enabled": false,
-        "model": "tiny",
+        "model": "small",
         "device": "auto"
       },
       "whisper": {
         "enabled": true,
         "model": "small"
-      },
-      "moonshine-onnx": {
-        "enabled": true,
-        "model": "tiny"
       }
     }
   },

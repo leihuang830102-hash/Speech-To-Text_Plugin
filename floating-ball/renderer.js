@@ -82,9 +82,16 @@ recordBtn.addEventListener('mouseleave', (e) => {
   }
 });
 
-// Prevent context menu
-recordBtn.addEventListener('contextmenu', (e) => {
+// Show context menu on right-click (both center button and drag area)
+const ballElement = document.getElementById('ball');
+
+ballElement.addEventListener('contextmenu', (e) => {
   e.preventDefault();
+  e.stopPropagation();
+  console.log('[renderer] contextmenu event triggered');
+  if (window.electronAPI) {
+    window.electronAPI.showContextMenu();
+  }
 });
 
 // Prevent click event from firing

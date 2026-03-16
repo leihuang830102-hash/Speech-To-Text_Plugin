@@ -31,13 +31,13 @@ def load_config(config_path: Path = None) -> Dict[str, Any]:
     env_path = config_path.parent.parent / ".env"
     env_vars = load_env_file(env_path)
 
-    # Inject API keys into config
-    if "DOUBAO_APP_KEY" in env_vars:
+    # Inject API keys into config (for Realtime Dialogue API)
+    if "DOUBAO_APP_ID" in env_vars:
         config.setdefault("stt", {}).setdefault("backends", {}).setdefault("doubao-cloud", {})
-        config["stt"]["backends"]["doubao-cloud"]["appKey"] = env_vars["DOUBAO_APP_KEY"]
-    if "DOUBAO_ACCESS_KEY" in env_vars:
+        config["stt"]["backends"]["doubao-cloud"]["appId"] = env_vars["DOUBAO_APP_ID"]
+    if "DOUBAO_ACCESS_TOKEN" in env_vars:
         config.setdefault("stt", {}).setdefault("backends", {}).setdefault("doubao-cloud", {})
-        config["stt"]["backends"]["doubao-cloud"]["accessKey"] = env_vars["DOUBAO_ACCESS_KEY"]
+        config["stt"]["backends"]["doubao-cloud"]["accessToken"] = env_vars["DOUBAO_ACCESS_TOKEN"]
 
     return config
 

@@ -4,165 +4,160 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-OpenCode Doubao TTS Plugin - A voice input plugin for OpenCode that enables speech-to-text input via a floating button or keyboard shortcut. The plugin uses Python-based speech recognition backends (Moonshine, Whisper, Faster-Whisper) running in a separate process to transcribe audio and insert text directly into the OpenCode editor.
+OpenCodeTTS - A voice input tool that enables speech-to-text input via a floating ball. The application supports multiple STT backends:
+
+- **Doubao Cloud ASR** (豆包云端) - Fast cloud-based recognition (~1s)
+- **Local Whisper** - Offline recognition (~10s on CPU)
+
+## Quick Start
+
+```bash
+# Start the floating ball application
+cd floating-ball && npm start
+```
+
+**Usage:**
+- **Left-click and hold**: Start recording, release to transcribe
+- **Right-click**: Open context menu to switch backends or exit
+
+## Architecture
+
+```
+┌─────────────────┐     WebSocket      ┌──────────────────┐
+│  Electron App   │ ◄───────────────► │  Python STT      │
+│  (floating-ball)│   ws://127.0.0.1:8765  Server        │
+└─────────────────┘                    └──────────────────┘
+        │                                       │
+        │ IPC                                   │
+        ▼                                       ▼
+┌─────────────────┐                    ┌──────────────────┐
+│  record.py      │                    │  doubao-cloud    │
+│  (录音)          │                    │  whisper (本地)   │
+└─────────────────┘                    └──────────────────┘
+```
+
+### Components
+
+| Directory | Description |
+|-----------|-------------|
+| `floating-ball/` | Electron floating ball application |
+| `src/scripts/stt/` | Python STT server and backends |
+| `config/` | Server configuration |
+| `.env` | API credentials (not in git) |
+
+## Configuration
+
+### Environment Variables (`.env`)
+
+Create a `.env` file in the project root with Doubao API credentials:
+
+```env
+# 豆包语音识别配置
+ASR_APP_ID=your_app_id
+ASR_ACCESS_TOKEN=your_access_token
+ASR_ACCESS_SECRET=your_access_secret
+ASR_CLUSTER=volcengine_streaming_common
+```
+
+**Important:** Never commit `.env` to git. It's already in `.gitignore`.
+
+### Server Config (`config/stt-config.json`)
+
+```json
+{
+  "stt": {
+    "defaultBackend": "doubao-cloud",
+    "backends": {
+      "doubao-cloud": { "enabled": true },
+      "whisper": { "enabled": true, "model": "small" }
+    }
+  }
+}
+```
+
+### Floating Ball Config (`floating-ball/config.json`)
+
+```json
+{
+  "stt": {
+    "backend": "doubao-cloud",
+    "modelSize": "small",
+    "language": "auto"
+  }
+}
+```
+
+## STT Backends
+
+### Doubao Cloud ASR (Recommended)
+
+- **Speed**: ~1 second
+- **Accuracy**: High for Chinese
+- **Requires**: API credentials in `.env`
+
+### Local Whisper
+
+- **Speed**: ~10 seconds on CPU
+- **Accuracy**: Good
+- **Requires**: No internet, no API key
 
 ## Common Commands
 
 ```bash
-# Build TypeScript to dist/
+# Start floating ball
+cd floating-ball && npm start
+
+# Build TypeScript
 npm run build
 
-# Run STT test suite
+# Run tests
 npm run test
-
-# Run all tests
-node tests/test-runner.js
-
-# Run specific test case
-node tests/test-runner.js --case 001
-
-# Add new test case interactively
-node tests/test-runner.js --add
-
-# List available test fixtures
-node tests/test-runner.js --fixtures
-
-# List available STT backends
-node tests/test-runner.js --list-backends
 
 # Lint source code
 npm run lint
 ```
 
-## Architecture
-
-### Plugin Structure
-
-The plugin follows the OpenCode plugin architecture:
-
-- **Entry Point**: `src/index.ts` - Main plugin that exports a `Plugin` function taking `PluginContext`
-- **Components**: React components rendered in the OpenCode UI (e.g., `FloatingVoiceButton`)
-- **Tools**: Custom commands exposed to OpenCode CLI
-- **Keybindings**: Keyboard shortcuts registered with OpenCode
-- **Hooks**: React hooks for state management
-
-### Python Backend Integration
-
-The plugin uses a separate Python process (`src/scripts/stt.py`) for speech-to-text:
-
-1. **Communication**: TypeScript spawns Python process via `child_process.spawn()`
-2. **Protocol**: JSON over stdout/stderr
-3. **Audio Recording**: Python uses `sounddevice` + `numpy` for microphone capture
-4. **Silence Detection**: Recording auto-stops after 1.5s of silence (configurable)
-5. **Backend Selection**: Auto-detects available backends in order: Moonshine → Faster-Whisper → Whisper
-
-### STT Backends
-
-The Python script supports multiple backends with automatic fallback:
-
-- **Moonshine** (`moonshine_onnx`): Recommended, fastest, smallest models
-- **Faster-Whisper** (`faster_whisper`): Optimized OpenAI Whisper implementation
-- **Whisper** (`openai-whisper`): Original OpenAI implementation
-
-Models: `tiny`, `base`, `small`, `medium` (speed vs accuracy tradeoff)
-
-### State Flow
-
-```
-User Input (Floating Button/Hotkey)
-    ↓
-FloatingVoiceButton: startRecording
-    ↓
-useVoiceInput hook (state: 'recording')
-    ↓
-User releases button → stopRecording
-    ↓
-voice-service.ts: transcribe()
-    ↓
-Spawn Python process (stt.py)
-    ↓
-Python: record_audio() → transcribe_*()
-    ↓
-JSON response: {success, text, backend, model}
-    ↓
-insertText(text) → OpenCode editor
-```
-
-## Configuration
-
-### Plugin Config (`Config.json`)
-
-```json
-{
-  "pythonPath": "python",          // Python interpreter path
-  "sttBackend": "faster-whisper",  // or "moonshine", "whisper", "auto"
-  "modelSize": "tiny",              // or "base", "small", "medium"
-  "language": "zh",                 // Language code (zh, en, etc.)
-  "maxDuration": 30,                // Max recording seconds
-  "hotkey": "Ctrl+Shift+V"         // Keyboard shortcut
-}
-```
-
-### TypeScript Types
-
-Key types in `src/services/voice-service.ts`:
-- `SttBackend`: 'moonshine' | 'whisper' | 'faster-whisper' | 'auto'
-- `SttResult`: { success, text?, error?, backend?, model? }
-- `PluginConfig`: Complete plugin settings
-
 ## Python Dependencies
 
-Required Python packages (install via pip):
-
 ```bash
-pip install sounddevice soundfile numpy faster-whisper
-# Optional backends:
-pip install moonshine-onnx      # For Moonshine backend
-pip install openai-whisper      # For original Whisper
+pip install sounddevice soundfile numpy websockets aiohttp
+pip install openai-whisper     # For local Whisper
+pip install zhconv             # For Chinese text conversion
 ```
-
-## Testing
-
-### Test Structure
-
-- `tests/test-runner.js`: Custom Node.js test runner (not standard test frameworks)
-- `tests/cases/stt-cases.json`: Test case definitions
-- `tests/fixtures/`: Audio file fixtures
-
-### Test Cases
-
-Each test case in `stt-cases.json`:
-```json
-{
-  "id": "001",
-  "audio": "test_sample_audio.wav",
-  "expected": "Expected text",
-  "language": "en",
-  "backend": "whisper",
-  "model": "tiny"
-}
-```
-
-### Test Output
-
-Tests pass if similarity ≥ 80% between expected and actual text.
 
 ## Key Files Reference
 
 | File | Purpose |
 |------|---------|
-| `src/index.ts` | Plugin entry point, registers components/tools/keybindings |
-| `src/components/FloatingVoiceButton.tsx` | Floating mic button with recording states |
-| `src/hooks/useVoiceInput.ts` | React hook managing voice input lifecycle |
-| `src/services/voice-service.ts` | Python process management and config |
-| `src/scripts/stt.py` | Python STT backend with audio recording |
-| `Config.json` | Plugin configuration and settings schema |
-| `package.json` | NPM dependencies and scripts |
+| `floating-ball/main.js` | Electron main process, context menu, WebSocket client |
+| `floating-ball/renderer.js` | UI rendering and event handling |
+| `src/scripts/stt/server.py` | WebSocket STT server |
+| `src/scripts/stt/backends/doubao.py` | Doubao cloud ASR backend |
+| `src/scripts/stt/backends/whisper.py` | Local Whisper backend |
+| `src/scripts/stt/backends/manager.py` | Backend switching logic |
+| `config/stt-config.json` | Server-side backend configuration |
+| `floating-ball/config.json` | Client-side configuration |
 
 ## Development Notes
 
-- The plugin is a TypeScript/React frontend with Python backend
-- Python process is spawned per transcription (not a persistent daemon)
-- Text insertion uses OpenCode's `context.insertText()` API
-- Error handling includes UI feedback via the floating button states
-- The `Ref/` directory contains reference implementations from other projects (not actively used)
+### Backend Switching
+
+The floating ball supports runtime backend switching via right-click context menu:
+1. Menu reads current backend from `config.stt.backend`
+2. Sends `switch_backend` command to server via WebSocket
+3. Server switches backend and confirms
+4. Client updates local config and saves
+
+### Text Insertion
+
+Text is inserted using clipboard + PowerShell SendKeys for maximum compatibility on Windows.
+
+### Traditional to Simplified Chinese
+
+The `zhconv` library converts traditional Chinese output to simplified Chinese automatically.
+
+## Security Notes
+
+- **Never commit `.env`** - Contains API credentials
+- **Never commit `Ref/`** - Contains reference implementations with sensitive data
+- Both are already in `.gitignore`

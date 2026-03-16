@@ -6,14 +6,10 @@
     "serverScript": "../src/scripts/stt/server.py"
   },
   "stt": {
-    "backend": "whisper",
+    "backend": "doubao-cloud",
     "modelSize": "small",
     "language": "auto",
     "maxDuration": 30
-  },
-  "websocket": {
-    "enabled": true,
-    "url": "ws://127.0.0.1:8765"
   },
   "window": {
     "width": 60,
@@ -30,5 +26,9 @@
   },
   "timeout": {
     "maxProcessingTime": 60000
+  },
+  "websocket": {
+    "enabled": true,
+    "url": "ws://127.0.0.1:8765"
   }
 }

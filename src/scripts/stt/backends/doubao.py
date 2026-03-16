@@ -1,229 +1,108 @@
 # src/scripts/stt/backends/doubao.py
-"""Doubao Cloud STT backend implementation."""
+"""Doubao Cloud ASR backend using RevenueModeASR SDK."""
 
 import asyncio
-import json
-import struct
-import gzip
-import uuid
-from typing import Optional
+import logging
+import os
+import tempfile
+from typing import Tuple
+
 from .base import BaseBackend
 
-# Constants for Doubao protocol
-DEFAULT_SAMPLE_RATE = 16000
-
-
-class ProtocolVersion:
-    V1 = 0b0001
-
-
-class MessageType:
-    CLIENT_FULL_REQUEST = 0b0001
-    CLIENT_AUDIO_ONLY_REQUEST = 0b0010
-    SERVER_FULL_RESPONSE = 0b1001
-    SERVER_ERROR_RESPONSE = 0b1111
-
-
-class MessageTypeSpecificFlags:
-    NO_SEQUENCE = 0b0000
-    POS_SEQUENCE = 0b0001
-    NEG_SEQUENCE = 0b0010
-    NEG_WITH_SEQUENCE = 0b0011
-
-
-class SerializationType:
-    NO_SERIALIZATION = 0b0000
-    JSON = 0b0001
-
-
-class CompressionType:
-    GZIP = 0b0001
+logger = logging.getLogger(__name__)
 
 
 class DoubaoBackend(BaseBackend):
-    """Doubao Cloud STT backend using WebSocket."""
+    """豆包云 ASR 后端 - 使用 RevenueModeASR SDK"""
 
     def __init__(self, config: dict):
         super().__init__(config)
-        self.url = config.get("url", "wss://openspeech.bytedance.com/api/v3/sauc/bigmodel_nostream")
-        self.app_key = config.get("appKey", "")
-        self.access_key = config.get("accessKey", "")
-        self._aiohttp = None
+        self._client = None
 
     @property
     def name(self) -> str:
         return "doubao-cloud"
 
     def is_available(self) -> bool:
-        """Check if API keys are configured."""
-        return bool(self.app_key and self.access_key)
+        """Check if SDK is available and configured."""
+        try:
+            # Load .env file using absolute path
+            from pathlib import Path
+            from dotenv import load_dotenv
 
-    async def _get_aiohttp(self):
-        """Lazy load aiohttp."""
-        if self._aiohttp is None:
-            import aiohttp
-            self._aiohttp = aiohttp
-        return self._aiohttp
+            # Get the .env file path (5 levels up from this file)
+            env_path = Path(__file__).parent.parent.parent.parent.parent / ".env"
+            load_dotenv(env_path)
 
-    def _build_request_header(self, message_type: int, message_type_specific_flags: int) -> bytes:
-        """Build protocol header."""
-        header = bytearray()
-        header.append((ProtocolVersion.V1 << 4) | 1)
-        header.append((message_type << 4) | message_type_specific_flags)
-        header.append((SerializationType.JSON << 4) | CompressionType.GZIP)
-        header.extend(bytes([0x00]))
-        return bytes(header)
+            # Check if required env vars are set
+            required_vars = ["ASR_APP_ID", "ASR_ACCESS_TOKEN", "ASR_CLUSTER"]
+            available = all(os.getenv(var) for var in required_vars)
 
-    def _build_full_request(self, seq: int) -> bytes:
-        """Build full client request with config."""
-        payload = {
-            "user": {"uid": "stt_user"},
-            "audio": {
-                "format": "wav",
-                "codec": "raw",
-                "rate": 16000,
-                "bits": 16,
-                "channel": 1
-            },
-            "request": {
-                "model_name": "bigmodel",
-                "enable_itn": True,
-                "enable_punc": True,
-                "enable_ddc": True,
-                "show_utterances": True,
-                "enable_nonstream": False
-            }
-        }
+            if not available:
+                missing = [var for var in required_vars if not os.getenv(var)]
+                logger.warning(f"[{self.name}] Missing env vars: {missing}")
 
-        payload_bytes = json.dumps(payload).encode('utf-8')
-        compressed = gzip.compress(payload_bytes)
+            return available
+        except Exception as e:
+            logger.error(f"[{self.name}] is_available check failed: {e}")
+            return False
 
-        request = bytearray()
-        request.extend(self._build_request_header(
-            MessageType.CLIENT_FULL_REQUEST,
-            MessageTypeSpecificFlags.POS_SEQUENCE
-        ))
-        request.extend(struct.pack('>i', seq))
-        request.extend(struct.pack('>I', len(compressed)))
-        request.extend(compressed)
+    async def initialize(self) -> bool:
+        """Initialize the ASR client."""
+        try:
+            # Import SDK from local doubao_asr package
+            from .doubao_asr import RevenueModeASR
+            self._client = RevenueModeASR()
+            self._initialized = True
+            logger.info(f"[{self.name}] Initialized RevenueModeASR client")
+            return True
+        except Exception as e:
+            logger.error(f"[{self.name}] Failed to initialize: {e}")
+            return False
 
-        return bytes(request)
+    async def transcribe(self, audio_data: bytes, language: str = "zh") -> Tuple[str, str]:
+        """
+        Transcribe audio data to text.
 
-    def _build_audio_request(self, seq: int, audio_chunk: bytes, is_last: bool = False) -> bytes:
-        """Build audio-only request."""
-        flags = MessageTypeSpecificFlags.NEG_WITH_SEQUENCE if is_last else MessageTypeSpecificFlags.POS_SEQUENCE
-        actual_seq = -seq if is_last else seq
-
-        compressed = gzip.compress(audio_chunk)
-
-        request = bytearray()
-        request.extend(self._build_request_header(
-            MessageType.CLIENT_AUDIO_ONLY_REQUEST,
-            flags
-        ))
-        request.extend(struct.pack('>i', actual_seq))
-        request.extend(struct.pack('>I', len(compressed)))
-        request.extend(compressed)
-
-        return bytes(request)
-
-    def _parse_response(self, data: bytes) -> dict:
-        """Parse server response."""
-        header_size = data[0] & 0x0f
-        message_type = data[1] >> 4
-        message_type_specific_flags = data[1] & 0x0f
-        serialization = data[2] >> 4
-        compression = data[2] & 0x0f
-
-        payload = data[header_size * 4:]
-
-        # Parse sequence if present
-        sequence = 0
-        if message_type_specific_flags & 0x01:
-            sequence = struct.unpack('>i', payload[:4])[0]
-            payload = payload[4:]
-
-        is_last = bool(message_type_specific_flags & 0x02)
-
-        # Parse payload size
-        if message_type == MessageType.SERVER_FULL_RESPONSE:
-            payload_size = struct.unpack('>I', payload[:4])[0]
-            payload = payload[4:]
-        elif message_type == MessageType.SERVER_ERROR_RESPONSE:
-            code = struct.unpack('>i', payload[:4])[0]
-            payload = payload[8:]  # Skip code and size
-        else:
-            payload_size = 0
-
-        # Decompress if needed
-        if compression == CompressionType.GZIP and payload:
-            try:
-                payload = gzip.decompress(payload)
-            except:
-                pass
-
-        # Parse JSON
-        result = {
-            "is_last": is_last,
-            "sequence": sequence,
-            "message_type": message_type
-        }
-
-        if payload and serialization == SerializationType.JSON:
-            try:
-                result["payload"] = json.loads(payload.decode('utf-8'))
-            except:
-                pass
-
-        return result
-
-    async def transcribe(self, audio_data: bytes, language: str = "zh") -> tuple:
-        """Transcribe audio using Doubao Cloud API.
+        Args:
+            audio_data: Raw audio bytes (WAV format)
+            language: Language code (zh, en, etc.)
 
         Returns:
-            Tuple of (text, detected_language)
+            Tuple of (transcribed text, language code)
         """
-        aiohttp = await self._get_aiohttp()
+        if self._client is None:
+            await self.initialize()
 
-        headers = {
-            "X-Api-Resource-Id": "volc.bigasr.sauc.duration",
-            "X-Api-Request-Id": str(uuid.uuid4()),
-            "X-Api-Access-Key": self.access_key,
-            "X-Api-App-Key": self.app_key
-        }
+        # Save audio to temp file (SDK expects file path)
+        with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as f:
+            f.write(audio_data)
+            temp_path = f.name
 
-        seq = 1
-        result_text = ""
+        try:
+            # Run blocking SDK call in executor
+            loop = asyncio.get_event_loop()
+            text = await loop.run_in_executor(
+                None,
+                self._client.recognize,
+                temp_path
+            )
 
-        async with aiohttp.ClientSession() as session:
-            async with session.ws_connect(self.url, headers=headers) as ws:
-                # Send full request
-                await ws.send_bytes(self._build_full_request(seq))
-                seq += 1
+            logger.info(f"[{self.name}] Transcription: {text}")
+            return text, language
 
-                # Split audio into chunks (200ms segments)
-                chunk_size = DEFAULT_SAMPLE_RATE * 2 * 0.2  # 16-bit mono
-                chunks = [audio_data[i:i + int(chunk_size)] for i in range(0, len(audio_data), int(chunk_size))]
+        except Exception as e:
+            logger.error(f"[{self.name}] Transcription failed: {e}")
+            raise
 
-                for i, chunk in enumerate(chunks):
-                    is_last = (i == len(chunks) - 1)
-                    await ws.send_bytes(self._build_audio_request(seq, chunk, is_last))
-                    if not is_last:
-                        seq += 1
+        finally:
+            # Clean up temp file
+            try:
+                os.unlink(temp_path)
+            except:
+                pass
 
-                    # Receive response
-                    try:
-                        msg = await asyncio.wait_for(ws.receive(), timeout=5.0)
-                        if msg.type == aiohttp.WSMsgType.BINARY:
-                            response = self._parse_response(msg.data)
-                            if "payload" in response:
-                                # Extract text from response
-                                payload = response["payload"]
-                                if isinstance(payload, dict) and "result" in payload:
-                                    for utterance in payload["result"].get("text", []):
-                                        result_text += utterance.get("text", "")
-                    except asyncio.TimeoutError:
-                        pass
-
-        # Doubao doesn't return detected language, use input language
-        return result_text.strip(), language
+    async def cleanup(self) -> None:
+        """Cleanup resources."""
+        self._client = None
+        self._initialized = False

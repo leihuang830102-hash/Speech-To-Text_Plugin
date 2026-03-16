@@ -1,0 +1,125 @@
+webaddress:https://www.volcengine.com/docs/6561/80818?lang=zh
+
+ 错误码 #
+错误码
+
+含义
+
+说明
+
+1000
+
+成功
+
+1001
+
+请求参数无效
+
+请求参数缺失必需字段 / 字段值无效 / 重复请求。
+
+1002
+
+无访问权限
+
+token 无效 / 过期 / 无权访问指定服务。
+
+1003
+
+访问超频
+
+当前 appid 访问 QPS 超出设定阈值。
+
+1004
+
+访问超额
+
+当前 appid 访问次数超出限制。
+
+1005
+
+服务器繁忙
+
+服务过载，无法处理当前请求。
+
+1008 - 1009
+
+保留号段
+
+待定。
+
+1010
+
+音频过长
+
+音频数据时长超出阈值。
+
+1011
+
+音频过大
+
+音频数据大小超出阈值。
+
+1012
+
+音频格式无效
+
+音频 header 有误 / 无法进行音频解码。
+
+1013
+
+音频静音
+
+音频未识别出任何文本结果。
+
+1014 - 1019
+
+保留号段
+
+待定。
+
+1020
+
+识别等待超时
+
+等待下一包就绪超时。
+
+1021
+
+识别处理超时
+
+识别处理过程超时。
+
+1022
+
+识别错误
+
+识别过程中发生错误。
+
+1023 - 1039
+
+保留号段
+
+待定。
+
+1099
+
+未知错误
+
+未归类错误。
+
+
+4. 常见问题 #
+
+1. 如何返回全部分句或单个分句的结果
+默认每次返回所有分句结果。
+如果想每次只返回当前分句结果，则设置 show_utterances=true 和 result_type=single；
+如果当前分句结果是中间结果，则返回 utterances 中的 definite=false；
+如果是分句最终结果，则返回 utterances 中的definite=true。
+
+2. 如何开启 ITN、顺滑、标点
+可通过workflow 参数，控制是否开启 ITN，标点或顺滑。
+workflow 默认值是 audio_in,resample,partition,vad,fe,decode，只进行识别；
+如果要开启 ITN 在 workflow 中增加 "itn"， audio_in,resample,partition,vad,fe,decode,itn；
+如果要开启顺滑在 workflow 中增加 "nlu_ddc"，audio_in,resample,partition,vad,fe,decode,nlu_ddc；
+如果要开启标点在 workflow 中增加 "nlu_punctuate"， audio_in,resample,partition,vad,fe,decode,nlu_punctuate；
+同时开启 itn, 顺滑和标点的 workflow 是 audio_in,resample,partition,vad,fe,decode,itn,nlu_ddc,nlu_punctuate。

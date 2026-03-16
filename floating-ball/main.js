@@ -1,6 +1,6 @@
 // main.js - Floating Ball Main Process
 // With WebSocket STT support for faster response
-const { app, BrowserWindow, ipcMain } = require('electron');
+const { app, BrowserWindow, ipcMain, Menu } = require('electron');
 const path = require('path');
 const { spawn } = require('child_process');
 const fs = require('fs');
@@ -32,6 +32,112 @@ function loadConfig() {
 }
 
 let config = loadConfig();
+
+function saveConfig() {
+  const configPath = path.join(__dirname, 'config.json');
+  try {
+    fs.writeFileSync(configPath, JSON.stringify(config, null, 2), 'utf-8');
+    log('INFO', 'config', 'Configuration saved');
+    return true;
+  } catch (e) {
+    log('ERROR', 'config', `Failed to save config: ${e.message}`);
+    return false;
+  }
+}
+
+// ============================================================================
+// Context Menu
+// ============================================================================
+
+function buildContextMenu() {
+  const currentBackend = config.stt.backend || 'whisper';
+  const backendLabel = currentBackend === 'doubao-cloud' ? '豆包云' : '本地 Whisper';
+  const otherBackend = currentBackend === 'doubao-cloud' ? 'whisper' : 'doubao-cloud';
+  const otherBackendLabel = currentBackend === 'doubao-cloud' ? '本地 Whisper' : '豆包云';
+
+  return Menu.buildFromTemplate([
+    {
+      label: `📍 当前: ${backendLabel}`,
+      enabled: false
+    },
+    {
+      label: `🔄 切换到: ${otherBackendLabel}`,
+      click: () => {
+        switchBackend(otherBackend);
+      }
+    },
+    { type: 'separator' },
+    {
+      label: '❌ 退出',
+      click: () => {
+        app.quit();
+      }
+    }
+  ]);
+}
+
+function switchBackend(backend) {
+  log('INFO', 'config', `Switching backend to: ${backend}`);
+
+  // Send switch_backend command to server via WebSocket
+  if (wsConnected && wsClient) {
+    wsClient.send(JSON.stringify({ action: 'switch_backend', backend: backend }));
+
+    // Wait for response then update local config
+    const handler = (data) => {
+      try {
+        const msg = JSON.parse(data.toString());
+        if (msg.event === 'backend_switched' && msg.backend === backend) {
+          wsClient.off('message', handler);
+          log('INFO', 'config', `Server confirmed backend switch to: ${backend}`);
+          config.stt.backend = backend;
+          saveConfig();
+          if (mainWindow && !mainWindow.isDestroyed()) {
+            mainWindow.webContents.send('backend-changed', backend);
+          }
+        } else if (msg.event === 'error') {
+          wsClient.off('message', handler);
+          log('ERROR', 'config', `Server rejected backend switch: ${msg.message}`);
+        }
+      } catch (e) {
+        // Ignore parse errors
+      }
+    };
+    wsClient.on('message', handler);
+
+    // Timeout for response
+    setTimeout(() => {
+      wsClient.off('message', handler);
+    }, 5000);
+  } else {
+    // Fallback: just update local config (for legacy mode)
+    log('WARN', 'config', 'WebSocket not connected, updating local config only');
+    config.stt.backend = backend;
+    saveConfig();
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('backend-changed', backend);
+    }
+  }
+}
+
+function reconnectWebSocket() {
+  if (wsClient) {
+    wsClient.close();
+    wsClient = null;
+    wsConnected = false;
+  }
+  connectWebSocket();
+}
+
+// IPC for context menu
+ipcMain.on('show-context-menu', (event) => {
+  const menu = buildContextMenu();
+  menu.popup(BrowserWindow.fromWebContents(event.sender));
+});
+
+ipcMain.on('switch-backend', (event, backend) => {
+  switchBackend(backend);
+});
 
 // ============================================================================
 // Logging
@@ -731,11 +837,11 @@ function scheduleReset(delay) {
 }
 
 // ============================================================================
-// IPC Handlers
+// Recording Functions (used by both IPC and Context Menu)
 // ============================================================================
 
-ipcMain.on('start-recording', () => {
-  log('INFO', 'main', 'IPC: start-recording received');
+function startRecording() {
+  log('INFO', 'main', 'startRecording called');
 
   if (state !== 'idle') {
     log('WARN', 'main', `Cannot start recording in state: ${state}`);
@@ -753,10 +859,10 @@ ipcMain.on('start-recording', () => {
     setState('warming');
     spawnPythonProcess();
   }
-});
+}
 
-ipcMain.on('stop-recording', () => {
-  log('INFO', 'main', 'IPC: stop-recording received');
+function stopRecording() {
+  log('INFO', 'main', 'stopRecording called');
 
   if (state === 'warming') {
     // Still warming up, just go to idle
@@ -768,6 +874,18 @@ ipcMain.on('stop-recording', () => {
   if (state === 'recording') {
     setState('processing');
   }
+}
+
+// ============================================================================
+// IPC Handlers
+// ============================================================================
+
+ipcMain.on('start-recording', () => {
+  startRecording();
+});
+
+ipcMain.on('stop-recording', () => {
+  stopRecording();
 });
 
 ipcMain.on('get-state', (event) => {
