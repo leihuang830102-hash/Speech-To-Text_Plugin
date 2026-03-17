@@ -109,6 +109,19 @@ if (window.electronAPI) {
     console.log(`[renderer] Received state from main: ${state}`);
     setState(state);
   });
+
+  // Handle intermediate transcription results
+  window.electronAPI.onIntermediateResult((text) => {
+    console.log(`[renderer] Intermediate result: ${text}`);
+    // Display intermediate result (grey text, hint)
+    showIntermediateResult(text);
+  });
+
+  // Clear intermediate result when final result comes
+  window.electronAPI.onClearIntermediate(() => {
+    console.log(`[renderer] Clear intermediate result`);
+    clearIntermediateResult();
+  });
 }
 
 // ============================================================================
@@ -117,3 +130,29 @@ if (window.electronAPI) {
 
 setState('idle');
 console.log('[renderer] Floating ball initialized (press to record, release to stop)');
+
+// ============================================================================
+// Intermediate Result Display Functions
+// ============================================================================
+
+function showIntermediateResult(text) {
+  console.log(`[renderer] Showing intermediate result: "${text}"`);
+  let tooltip = document.getElementById('intermediate-tooltip');
+  if (!tooltip) {
+    // Create tooltip if it doesn't exist
+    tooltip = document.createElement('div');
+    tooltip.id = 'intermediate-tooltip';
+    tooltip.className = 'intermediate-tooltip';
+    document.getElementById('ball').appendChild(tooltip);
+  }
+  tooltip.textContent = text;
+  tooltip.classList.add('visible');
+}
+
+function clearIntermediateResult() {
+  console.log(`[renderer] Clearing intermediate result`);
+  let tooltip = document.getElementById('intermediate-tooltip');
+  if (tooltip) {
+    tooltip.classList.remove('visible');
+  }
+}

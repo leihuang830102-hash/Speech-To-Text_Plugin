@@ -1,34 +1,19 @@
 {
-  "python": {
-    "path": "python",
-    "sttScript": "../src/scripts/stt.py",
-    "recordScript": "./record.py",
-    "serverScript": "../src/scripts/stt/server.py"
-  },
   "stt": {
     "backend": "doubao-cloud",
     "modelSize": "small",
     "language": "auto",
-    "maxDuration": 30
-  },
-  "window": {
-    "width": 60,
-    "height": 60,
-    "rememberPosition": true
-  },
-  "logging": {
-    "level": "INFO",
-    "logToFile": true,
-    "maxFileSize": 5242880,
-    "maxFiles": 5,
-    "maxTotalSize": 20971520,
-    "maxAge": 604800
-  },
-  "timeout": {
-    "maxProcessingTime": 60000
+    "maxDuration": 180,
+    "silenceThreshold": 0.02,
+    "intermediateSilenceDuration": 1.0,
+    "finalSilenceDuration": 5.0,
+    "minDuration": 0.5
   },
   "websocket": {
     "enabled": true,
     "url": "ws://127.0.0.1:8765"
+  },
+  "timeout": {
+    "maxProcessingTime": 300000
   }
 }

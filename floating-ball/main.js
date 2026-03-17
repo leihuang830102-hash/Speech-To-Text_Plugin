@@ -1,29 +1,64 @@
 // main.js - Floating Ball Main Process
 // With WebSocket STT support for faster response
-const { app, BrowserWindow, ipcMain, Menu } = require('electron');
+const { app, BrowserWindow, ipcMain, Menu, dialog } = require('electron');
 const path = require('path');
 const { spawn } = require('child_process');
 const fs = require('fs');
 const WebSocket = require('ws');
 
 // ============================================================================
+// Packaged Mode Detection
+// ============================================================================
+
+const isPackaged = app.isPackaged;
+const APP_NAME = 'OpenCodeTTS';
+
+// In packaged mode, use AppData directory for user configuration
+const CONFIG_DIR = isPackaged
+  ? path.join(process.env.APPDATA || process.env.HOME, APP_NAME)
+  : __dirname;
+
+const DOCS_URL = 'https://www.volcengine.com/docs/6561/80818?lang=zh';
+
+function getConfigPath() {
+  return path.join(CONFIG_DIR, 'config.json');
+}
+
+function getEnvPath() {
+  return path.join(CONFIG_DIR, '.env');
+}
+
+function getPositionPath() {
+  return path.join(CONFIG_DIR, 'position.json');
+}
+
+// ============================================================================
 // Configuration
 // ============================================================================
 
 function loadConfig() {
-  const configPath = path.join(__dirname, 'config.json');
+  const configPath = getConfigPath();
   const defaults = {
-    python: { path: 'python', sttScript: './stt/stt.py' },
-    stt: { backend: 'auto', modelSize: 'tiny', language: 'zh', maxDuration: 30 },
+    python: { path: 'python', sttScript: './stt/stt.py', recordScript: './record.py', serverScript: '../src/scripts/stt/server.py' },
+    stt: {
+      backend: 'auto',
+      modelSize: 'tiny',
+      language: 'zh',
+      maxDuration: 180,
+      silenceDuration: 0,      // 0 = disabled (record until user releases)
+      silenceThreshold: 0.01,
+      minDuration: 1.5
+    },
     window: { width: 60, height: 60, rememberPosition: true },
     logging: { level: 'INFO', logToFile: true },
-    timeout: { maxProcessingTime: 60000 }
+    timeout: { maxProcessingTime: 300000 }
   };
 
   try {
     if (fs.existsSync(configPath)) {
       const userConfig = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
-      return { ...defaults, ...userConfig };
+      // Deep merge to preserve nested properties
+      return deepMerge(defaults, userConfig);
     }
   } catch (e) {
     console.error(`Failed to load config: ${e.message}`);
@@ -31,11 +66,28 @@ function loadConfig() {
   return defaults;
 }
 
+// Deep merge utility function
+function deepMerge(target, source) {
+  const result = { ...target };
+  for (const key in source) {
+    if (source[key] && typeof source[key] === 'object' && !Array.isArray(source[key])) {
+      result[key] = deepMerge(result[key] || {}, source[key]);
+    } else {
+      result[key] = source[key];
+    }
+  }
+  return result;
+}
+
 let config = loadConfig();
 
 function saveConfig() {
-  const configPath = path.join(__dirname, 'config.json');
+  const configPath = getConfigPath();
   try {
+    // Ensure config directory exists
+    if (!fs.existsSync(CONFIG_DIR)) {
+      fs.mkdirSync(CONFIG_DIR, { recursive: true });
+    }
     fs.writeFileSync(configPath, JSON.stringify(config, null, 2), 'utf-8');
     log('INFO', 'config', 'Configuration saved');
     return true;
@@ -50,26 +102,36 @@ function saveConfig() {
 // ============================================================================
 
 function buildContextMenu() {
-  const currentBackend = config.stt.backend || 'whisper';
-  const backendLabel = currentBackend === 'doubao-cloud' ? '豆包云' : '本地 Whisper';
+  const currentBackend = config.stt.backend || 'doubao-cloud';
+  const backendLabel = currentBackend === 'doubao-cloud' ? '豆包云 (~1s)' : '本地 Whisper (~10s)';
   const otherBackend = currentBackend === 'doubao-cloud' ? 'whisper' : 'doubao-cloud';
-  const otherBackendLabel = currentBackend === 'doubao-cloud' ? '本地 Whisper' : '豆包云';
+  const otherBackendLabel = currentBackend === 'doubao-cloud' ? '本地 Whisper (~10s)' : '豆包云 (~1s)';
 
   return Menu.buildFromTemplate([
+    // Section: Current backend info
     {
-      label: `📍 当前: ${backendLabel}`,
+      label: `━━━ 当前后端 ━━━`,
       enabled: false
     },
     {
+      label: `✅ ${backendLabel}`,
+      enabled: false
+    },
+    { type: 'separator' },
+    // Section: Switch backend
+    {
       label: `🔄 切换到: ${otherBackendLabel}`,
       click: () => {
+        log('INFO', 'menu', `Switch backend clicked: ${otherBackend}`);
         switchBackend(otherBackend);
       }
     },
     { type: 'separator' },
+    // Section: Exit
     {
-      label: '❌ 退出',
+      label: '❌ 退出应用',
       click: () => {
+        log('INFO', 'menu', 'Exit clicked');
         app.quit();
       }
     }
@@ -131,8 +193,16 @@ function reconnectWebSocket() {
 
 // IPC for context menu
 ipcMain.on('show-context-menu', (event) => {
+  log('INFO', 'main', 'Context menu requested');
   const menu = buildContextMenu();
-  menu.popup(BrowserWindow.fromWebContents(event.sender));
+
+  // Use callback to ensure menu handlers work correctly with focusable:false window
+  menu.popup({
+    window: mainWindow,
+    callback: () => {
+      log('INFO', 'main', 'Context menu closed');
+    }
+  });
 });
 
 ipcMain.on('switch-backend', (event, backend) => {
@@ -193,19 +263,34 @@ function startSTTServer() {
       return;
     }
 
-    const serverScript = path.resolve(__dirname, config.python.serverScript || '../src/scripts/stt/server.py');
+    // In packaged mode, use bundled resources path
+    let serverScript;
+    if (isPackaged) {
+      serverScript = path.join(process.resourcesPath, 'resources', 'stt', 'server.py');
+    } else {
+      serverScript = path.resolve(__dirname, config.python.serverScript || '../src/scripts/stt/server.py');
+    }
     log('INFO', 'server', `Starting STT server: ${serverScript}`);
 
     serverStarting = true;
 
+    // Pass env file path to Python server
+    const envPath = getEnvPath();
+
     const env = {
       ...process.env,
       KMP_DUPLICATE_LIB_OK: 'TRUE',
-      PYTHONIOENCODING: 'utf-8'
+      PYTHONIOENCODING: 'utf-8',
+      DOTENV_PATH: envPath  // Custom env var for Python to find .env
     };
 
+    // In packaged mode, set working directory to resources
+    const cwd = isPackaged
+      ? path.join(process.resourcesPath, 'resources')
+      : path.resolve(__dirname, '..');
+
     serverProcess = spawn(config.python.path, [serverScript], {
-      cwd: path.resolve(__dirname, '..'),
+      cwd: cwd,
       env: env,
       stdio: ['ignore', 'pipe', 'pipe']
     });
@@ -321,20 +406,33 @@ function connectWebSocket() {
   }
 }
 
-function sendAudioToServer(audioData) {
+function sendAudioToServer(audioData, isIntermediate = false) {
   return new Promise((resolve, reject) => {
     if (!wsConnected || !wsClient) {
       reject(new Error('WebSocket not connected'));
       return;
     }
 
+    let resolved = false;  // Prevent double resolve
+
     const handler = (data) => {
+      if (resolved) return;  // Already resolved, ignore
+
       try {
         const msg = JSON.parse(data.toString());
         if (msg.event === 'result') {
+          resolved = true;
           wsClient.off('message', handler);
           resolve(msg.text);
+        } else if (msg.event === 'partial_result') {
+          // Intermediate result
+          if (isIntermediate) {
+            resolved = true;
+            wsClient.off('message', handler);
+            resolve(msg.text);
+          }
         } else if (msg.event === 'error') {
+          resolved = true;
           wsClient.off('message', handler);
           reject(new Error(msg.message));
         }
@@ -348,13 +446,20 @@ function sendAudioToServer(audioData) {
     // Send start_recording then audio data
     wsClient.send(JSON.stringify({ action: 'start_recording', language: config.stt.language }));
     wsClient.send(audioData);
-    wsClient.send(JSON.stringify({ action: 'stop_recording' }));
+    wsClient.send(JSON.stringify({ action: 'stop_recording', is_intermediate: isIntermediate }));
 
-    // Timeout
+    // Shorter timeout for intermediate results
+    const timeout = isIntermediate
+      ? (config.timeout?.intermediateProcessingTime || 10000)
+      : (config.timeout?.maxProcessingTime || 60000);
+
     setTimeout(() => {
-      wsClient.off('message', handler);
-      reject(new Error('WebSocket timeout'));
-    }, config.timeout?.maxProcessingTime || 60000);
+      if (!resolved) {
+        resolved = true;
+        wsClient.off('message', handler);
+        reject(new Error('WebSocket timeout'));
+      }
+    }, timeout);
   });
 }
 
@@ -408,7 +513,7 @@ function createWindow() {
   mainWindow.loadFile('index.html');
 
   if (config.window.rememberPosition) {
-    const positionPath = path.join(__dirname, 'position.json');
+    const positionPath = getPositionPath();
     try {
       if (fs.existsSync(positionPath)) {
         const position = JSON.parse(fs.readFileSync(positionPath, 'utf-8'));
@@ -423,8 +528,12 @@ function createWindow() {
   mainWindow.on('moved', () => {
     if (config.window.rememberPosition) {
       const [x, y] = mainWindow.getPosition();
+      // Ensure config directory exists
+      if (!fs.existsSync(CONFIG_DIR)) {
+        fs.mkdirSync(CONFIG_DIR, { recursive: true });
+      }
       fs.writeFileSync(
-        path.join(__dirname, 'position.json'),
+        getPositionPath(),
         JSON.stringify({ x, y })
       );
     }
@@ -519,17 +628,32 @@ function cleanupPythonProcess() {
 }
 
 // WebSocket mode: Record audio with Python, transcribe via WebSocket
+// Supports streaming output with intermediate silence detection
+let streamingAudioBuffer = [];  // Buffer for streaming mode
+let intermediateResultDisplayed = false;
+
 function spawnRecordingOnly() {
   if (pythonProcess) {
     log('WARN', 'main', 'Python process already running, killing old one');
     cleanupPythonProcess();
   }
 
+  streamingAudioBuffer = [];  // Reset streaming buffer
+  intermediateResultDisplayed = false;
+
   const scriptPath = path.join(__dirname, config.python.recordScript || './record.py');
+
+  // Streaming parameters
+  const intermediateSilence = config.stt?.intermediateSilenceDuration || 0.5;
+  const finalSilence = config.stt?.finalSilenceDuration || config.stt?.silenceDuration || 5.0;
+
   const args = [
     scriptPath,
     '--duration', String(config.stt.maxDuration),
-    '--silence-duration', '1.5'
+    '--silence-threshold', String(config.stt?.silenceThreshold || 0.01),
+    '--intermediate-silence', String(intermediateSilence),
+    '--final-silence', String(finalSilence),
+    '--min-duration', String(config.stt?.minDuration || 1.5)
   ];
 
   log('INFO', 'main', `Starting recorder: ${config.python.path} ${args.join(' ')}`);
@@ -540,20 +664,58 @@ function spawnRecordingOnly() {
   };
 
   pythonProcess = spawn(config.python.path, args, { env: pythonEnv });
-  let audioBuffer = [];
 
   pythonProcess.stdout.on('data', (data) => {
     // Collect binary audio data
-    audioBuffer.push(data);
+    streamingAudioBuffer.push(data);
   });
 
-  pythonProcess.stderr.on('data', (data) => {
-    const stderrText = data.toString().trim();
-    log('DEBUG', 'main', `Recorder stderr: ${stderrText}`);
+  pythonProcess.stderr.on('data', async (data) => {
+    const stderrText = data.toString();
+    log('DEBUG', 'main', `Recorder stderr: ${stderrText.trim()}`);
 
+    // Handle recording started
     if (stderrText.includes('Recording...') && state === 'warming') {
       log('INFO', 'main', 'Recorder is now recording');
       setState('recording');
+    }
+
+    // Process events line by line
+    const lines = stderrText.split('\n');
+    for (const line of lines) {
+      const trimmedLine = line.trim();
+      if (!trimmedLine) continue;
+
+      // Handle intermediate silence (0.5s) - output text and continue recording
+      if (trimmedLine.includes('"event": "intermediate_silence"')) {
+        log('INFO', 'main', `Intermediate silence detected (0.5s)`);
+
+        // Small delay to ensure audio data is flushed
+        await new Promise(resolve => setTimeout(resolve, 50));
+
+        if (streamingAudioBuffer.length > 0 && wsConnected && wsClient) {
+          const audioData = Buffer.concat(streamingAudioBuffer);
+          log('INFO', 'main', `Intermediate: ${audioData.length} bytes`);
+
+          try {
+            const text = await sendAudioToServer(audioData, false);
+            if (text && text.trim()) {
+              log('INFO', 'main', `Intermediate text: "${text}"`);
+              await insertTextImmediately(text);
+            }
+          } catch (e) {
+            log('WARN', 'main', `Intermediate transcription failed: ${e.message}`);
+          }
+          // Clear buffer - audio already transcribed
+          streamingAudioBuffer = [];
+        }
+      }
+
+      // Handle final silence (5s) - output text and stop
+      if (trimmedLine.includes('"event": "final_silence"') ||
+          trimmedLine.includes('"event": "max_duration"')) {
+        log('INFO', 'main', `Final event: ${trimmedLine}`);
+      }
     }
   });
 
@@ -563,26 +725,35 @@ function spawnRecordingOnly() {
     processTimeout = null;
     pythonProcess = null;
 
-    if (code === 0 && audioBuffer.length > 0) {
-      // Combine audio chunks
-      const audioData = Buffer.concat(audioBuffer);
-      log('INFO', 'main', `Recorded ${audioData.length} bytes, sending to WebSocket`);
+    // Handle any remaining audio
+    if (code === 0 && streamingAudioBuffer.length > 0) {
+      const audioData = Buffer.concat(streamingAudioBuffer);
+      log('INFO', 'main', `Final: ${audioData.length} bytes`);
 
       try {
-        const text = await sendAudioToServer(audioData);
-        await handleTranscriptionResult(text);
+        const text = await sendAudioToServer(audioData, false);
+        if (text && text.trim()) {
+          log('INFO', 'main', `Final text: "${text}"`);
+          await insertTextImmediately(text);
+        }
+        setState('success');
+        scheduleReset(500);
       } catch (e) {
-        log('ERROR', 'main', `WebSocket transcription failed: ${e.message}`);
+        log('ERROR', 'main', `Final transcription failed: ${e.message}`);
         setState('error');
         scheduleReset(1000);
-        restoreWindow();
       }
+      streamingAudioBuffer = [];
+    } else if (code === 0) {
+      // No remaining audio, just go to success
+      setState('success');
+      scheduleReset(500);
     } else {
-      log('ERROR', 'main', 'Recording failed or no audio');
+      log('ERROR', 'main', 'Recording failed');
       setState('error');
       scheduleReset(1000);
-      restoreWindow();
     }
+    restoreWindow();
   });
 
   pythonProcess.on('error', (err) => {
@@ -592,14 +763,42 @@ function spawnRecordingOnly() {
     scheduleReset(1000);
   });
 
-  // Timeout
-  const timeout = config.timeout?.maxProcessingTime || 60000;
+  // Timeout (extended for long recordings)
+  const timeout = config.timeout?.maxProcessingTime || 300000;
   processTimeout = setTimeout(() => {
     log('WARN', 'main', `Recorder timed out after ${timeout}ms`);
     cleanupPythonProcess();
     setState('error');
     scheduleReset(1000);
   }, timeout);
+}
+
+// Insert text immediately without changing state (for intermediate results)
+async function insertTextImmediately(text) {
+  const { clipboard } = require('electron');
+  const { execSync } = require('child_process');
+
+  log('INFO', 'insertText', `Inserting: "${text}"`);
+
+  try {
+    // Write to clipboard
+    clipboard.writeText(text);
+
+    // Wait briefly for clipboard
+    await new Promise(resolve => setTimeout(resolve, 50));
+
+    // Send Ctrl+V
+    const psScript = `
+Add-Type -AssemblyName System.Windows.Forms
+[System.Windows.Forms.SendKeys]::SendWait("^v")
+`;
+    const base64Cmd = Buffer.from(psScript, 'utf16le').toString('base64');
+    execSync(`powershell -EncodedCommand ${base64Cmd}`, { timeout: 5000 });
+
+    log('INFO', 'insertText', `Inserted successfully`);
+  } catch (e) {
+    log('ERROR', 'insertText', `Failed: ${e.message}`);
+  }
 }
 
 async function handleTranscriptionResult(text) {
@@ -687,6 +886,29 @@ async function handlePythonOutput(output) {
 // ============================================================================
 // Text Insertion
 // ============================================================================
+
+// Insert text immediately (for intermediate results during recording)
+async function insertTextImmediately(text) {
+  const { clipboard } = require('electron');
+  const { execSync } = require('child_process');
+
+  log('INFO', 'insertText', `Inserting intermediate: "${text}"`);
+
+  try {
+    clipboard.writeText(text);
+    await new Promise(resolve => setTimeout(resolve, 50));
+
+    const psScript = `
+Add-Type -AssemblyName System.Windows.Forms
+[System.Windows.Forms.SendKeys]::SendWait("^v")
+`;
+    const base64Cmd = Buffer.from(psScript, 'utf16le').toString('base64');
+    execSync(`powershell -EncodedCommand ${base64Cmd}`, { timeout: 5000 });
+    log('INFO', 'insertText', `Intermediate text inserted`);
+  } catch (e) {
+    log('ERROR', 'insertText', `Intermediate insertion failed: ${e.message}`);
+  }
+}
 
 async function insertText(text) {
   const { clipboard } = require('electron');
@@ -862,7 +1084,7 @@ function startRecording() {
 }
 
 function stopRecording() {
-  log('INFO', 'main', 'stopRecording called');
+  log('INFO', 'main', `stopRecording called (state: ${state}, pythonProcess: ${pythonProcess ? 'running' : 'null'})`);
 
   if (state === 'warming') {
     // Still warming up, just go to idle
@@ -872,6 +1094,7 @@ function stopRecording() {
   }
 
   if (state === 'recording') {
+    log('INFO', 'main', 'Recording -> Processing, Python recorder will stop on its own (silence detection or max duration)');
     setState('processing');
   }
 }
@@ -893,10 +1116,45 @@ ipcMain.on('get-state', (event) => {
 });
 
 // ============================================================================
+// First-Run Check
+// ============================================================================
+
+function checkFirstRun() {
+  // In development mode, skip first-run check (use project .env)
+  if (!isPackaged) {
+    return true;
+  }
+
+  const envPath = getEnvPath();
+
+  if (!fs.existsSync(envPath)) {
+    dialog.showErrorBox(
+      'Configuration Required / 需要配置',
+      'Please run the setup wizard to configure API credentials.\n' +
+      '请运行设置向导配置 API 凭证。\n\n' +
+      'Run in terminal / 在终端运行:\n' +
+      '  npm run setup\n\n' +
+      'Or manually create / 或手动创建:\n' +
+      `  ${envPath}\n\n` +
+      `Documentation / 文档: ${DOCS_URL}`
+    );
+    app.quit();
+    return false;
+  }
+
+  return true;
+}
+
+// ============================================================================
 // App Lifecycle
 // ============================================================================
 
 app.whenReady().then(async () => {
+  // Check for first-run configuration
+  if (!checkFirstRun()) {
+    return;
+  }
+
   createWindow();
 
   // Ensure STT server is running before connecting WebSocket

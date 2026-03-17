@@ -17,5 +17,14 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   onLog: (callback) => {
     ipcRenderer.on('log', (event, message) => callback(message));
+  },
+
+  // Streaming output support
+  onIntermediateResult: (callback) => {
+    ipcRenderer.on('intermediate-result', (event, text) => callback(text));
+  },
+
+  onClearIntermediate: (callback) => {
+    ipcRenderer.on('clear-intermediate', () => callback());
   }
 });

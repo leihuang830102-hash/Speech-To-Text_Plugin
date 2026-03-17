@@ -146,3 +146,53 @@ body {
 .record-btn:hover {
   filter: brightness(1.1);
 }
+
+/* ============================================================================
+   Intermediate Result Tooltip (Streaming Output)
+   ============================================================================ */
+
+.intermediate-tooltip {
+  position: absolute;
+  bottom: -80px;
+  left: 50%;
+  transform: translateX(-50%, 0);
+  background: rgba(0, 0,0,0.85);
+  border-radius: 8px;
+  padding: 8px 16px;
+  max-width: 300px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 13px;
+  color: #888;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
+  opacity: 0;
+  transition: opacity 0.3s ease, pointer-events: none;
+}
+
+.intermediate-tooltip.visible {
+  opacity: 1;
+}
+
+.intermediate-tooltip .text {
+  color: #666;
+}
+
+/* ============================================================================
+   Functions
+   ============================================================================ */
+
+function showIntermediateResult(text) {
+  const tooltip = document.getElementById('intermediate-tooltip');
+  if (tooltip) {
+    tooltip.textContent = text;
+    tooltip.classList.add('visible');
+  }
+}
+
+function clearIntermediateResult() {
+  const tooltip = document.getElementById('intermediate-tooltip');
+  if (tooltip) {
+    tooltip.classList.remove('visible');
+  }
+}
