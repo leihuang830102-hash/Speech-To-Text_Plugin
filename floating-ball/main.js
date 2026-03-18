@@ -257,6 +257,39 @@ Add-Type -MemberDefinition '[DllImport("user32.dll")] public static extern short
   }
 }
 
+/**
+ * Register Right Ctrl as global hotkey
+ */
+function registerGlobalHotkey() {
+  const { globalShortcut } = require('electron');
+
+  // Unregister first in case of re-registration
+  if (globalShortcut.isRegistered('RightControl')) {
+    globalShortcut.unregister('RightControl');
+  }
+
+  const registered = globalShortcut.register('RightControl', () => {
+    onRightCtrlPressed();
+  });
+
+  if (registered) {
+    log('INFO', 'hotkey', 'RightCtrl hotkey registered successfully');
+  } else {
+    log('ERROR', 'hotkey', 'Failed to register RightCtrl hotkey - may be in use by another app');
+  }
+
+  return registered;
+}
+
+/**
+ * Unregister all global hotkeys
+ */
+function unregisterGlobalHotkey() {
+  const { globalShortcut } = require('electron');
+  globalShortcut.unregisterAll();
+  log('INFO', 'hotkey', 'Global hotkeys unregistered');
+}
+
 // ============================================================================
 // STT Server Management
 // ============================================================================
