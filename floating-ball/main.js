@@ -290,6 +290,46 @@ function unregisterGlobalHotkey() {
   log('INFO', 'hotkey', 'Global hotkeys unregistered');
 }
 
+// Polling interval reference for cleanup
+let hotkeyPollInterval = null;
+
+/**
+ * Handle Right Ctrl key press
+ * Starts recording and polls for key release
+ */
+function onRightCtrlPressed() {
+  log('INFO', 'hotkey', 'RightCtrl pressed');
+
+  // Check if we can start recording
+  if (state !== 'idle') {
+    log('DEBUG', 'hotkey', `Ignoring hotkey, state is ${state} (not idle)`);
+    return;
+  }
+
+  // Start recording using existing function
+  startRecording();
+
+  // Clear any existing poll interval
+  if (hotkeyPollInterval) {
+    clearInterval(hotkeyPollInterval);
+    hotkeyPollInterval = null;
+  }
+
+  // Poll for key release every 50ms
+  hotkeyPollInterval = setInterval(() => {
+    if (!isRightCtrlPressed()) {
+      log('INFO', 'hotkey', 'RightCtrl released');
+      clearInterval(hotkeyPollInterval);
+      hotkeyPollInterval = null;
+
+      // Only stop if we're still recording (not already stopped by other means)
+      if (state === 'recording') {
+        stopRecording();
+      }
+    }
+  }, 50);
+}
+
 // ============================================================================
 // STT Server Management
 // ============================================================================
