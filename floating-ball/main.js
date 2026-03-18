@@ -226,6 +226,38 @@ function log(level, module, message) {
 }
 
 // ============================================================================
+// Keyboard Hotkey Support
+// ============================================================================
+
+/**
+ * Check if Right Ctrl key is currently pressed
+ * Uses Windows API via PowerShell
+ * @returns {boolean}
+ */
+function isRightCtrlPressed() {
+  const { execSync } = require('child_process');
+
+  // Virtual key code for Right Ctrl is 0xA3 (163)
+  // GetAsyncKeyState returns 0x8000 if key is currently down
+  const psScript = `
+Add-Type -MemberDefinition '[DllImport("user32.dll")] public static extern short GetAsyncKeyState(int vKey);' -Name Win32 -Namespace N
+[N.Win32]::GetAsyncKeyState(0xA3) -band 0x8000
+`;
+
+  try {
+    const base64Cmd = Buffer.from(psScript, 'utf16le').toString('base64');
+    const result = execSync(`powershell -EncodedCommand ${base64Cmd}`, {
+      encoding: 'utf8',
+      timeout: 100
+    });
+    return result.includes('True');
+  } catch (e) {
+    log('ERROR', 'hotkey', `Failed to check key state: ${e.message}`);
+    return false;
+  }
+}
+
+// ============================================================================
 // STT Server Management
 // ============================================================================
 
