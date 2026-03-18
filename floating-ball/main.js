@@ -1265,6 +1265,9 @@ app.whenReady().then(async () => {
   // Ensure STT server is running before connecting WebSocket
   await ensureServerRunning();
   connectWebSocket();
+
+  // Register global hotkey for Right Ctrl
+  registerGlobalHotkey();
 });
 
 app.on('window-all-closed', () => {
@@ -1273,6 +1276,11 @@ app.on('window-all-closed', () => {
   if (wsClient) {
     wsClient.close();
     wsClient = null;
+  }
+  // Clear hotkey polling interval
+  if (hotkeyPollInterval) {
+    clearInterval(hotkeyPollInterval);
+    hotkeyPollInterval = null;
   }
   if (process.platform !== 'darwin') {
     app.quit();
@@ -1288,4 +1296,9 @@ app.on('activate', () => {
 app.on('before-quit', () => {
   cleanupPythonProcess();
   cleanupServer();
+});
+
+app.on('will-quit', () => {
+  // Unregister all global hotkeys
+  unregisterGlobalHotkey();
 });
