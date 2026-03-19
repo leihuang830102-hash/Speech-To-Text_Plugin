@@ -59,7 +59,8 @@ async function runTranscription(audioPath, backend = 'auto', model = 'tiny', lan
 
     const proc = spawn(pythonPath, args, {
       stdio: ['inherit', 'pipe', 'pipe'],
-      env: { ...process.env, KMP_DUPLICATE_LIB_OK: 'TRUE' }
+      env: { ...process.env, KMP_DUPLICATE_LIB_OK: 'TRUE' },
+      shell: true  // Use shell on Windows for proper env var handling
     });
 
     let stdout = '';
@@ -109,6 +110,20 @@ async function runSingleTest(testCase, backendOverride = null) {
       testCase.model || 'tiny',
       testCase.language || 'zh'
     );
+
+    // Handle error response from STT backend
+    if (!result.success) {
+      return {
+        id: testCase.id,
+        success: false,
+        error: result.error || 'Unknown STT error',
+        expected: testCase.expected,
+        actual: null,
+        similarity: 0,
+        backend: result.backend,
+        duration: result.duration
+      };
+    }
 
     const similarity = calculateSimilarity(result.text || '', testCase.expected);
 
