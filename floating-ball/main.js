@@ -743,6 +743,10 @@ function spawnPythonProcess() {
 function cleanupPythonProcess() {
   if (pythonProcess) {
     log('INFO', 'main', 'Terminating Python process');
+    // Remove all event listeners to prevent buffered data from firing
+    pythonProcess.stdout.removeAllListeners();
+    pythonProcess.stderr.removeAllListeners();
+    pythonProcess.removeAllListeners();
     pythonProcess.kill();
     pythonProcess = null;
   }
@@ -750,6 +754,9 @@ function cleanupPythonProcess() {
     clearTimeout(processTimeout);
     processTimeout = null;
   }
+  // CRITICAL: Clear audio buffer and reset flags
+  streamingAudioBuffer = [];
+  intermediateResultDisplayed = false;
 }
 
 // WebSocket mode: Record audio with Python, transcribe via WebSocket
