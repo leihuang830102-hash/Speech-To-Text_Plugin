@@ -763,6 +763,7 @@ function cleanupPythonProcess() {
 // Supports streaming output with intermediate silence detection
 let streamingAudioBuffer = [];  // Buffer for streaming mode
 let intermediateResultDisplayed = false;
+let transcriptionInProgress = false;  // Global lock to prevent duplicate transcription
 
 function spawnRecordingOnly() {
   if (pythonProcess) {
@@ -772,6 +773,7 @@ function spawnRecordingOnly() {
 
   streamingAudioBuffer = [];  // Reset streaming buffer
   intermediateResultDisplayed = false;
+  transcriptionInProgress = false;  // Reset global lock
 
   const scriptPath = path.join(__dirname, config.python.recordScript || './record.py');
 
@@ -820,12 +822,12 @@ function spawnRecordingOnly() {
 
       // Handle intermediate silence (0.5s) - output text and continue recording
       if (trimmedLine.includes('"event": "intermediate_silence"')) {
-        // Prevent concurrent processing - if already processing an intermediate, skip
-        if (intermediateResultDisplayed) {
-          log('DEBUG', 'main', `Skipping intermediate_silence - already processing`);
+        // Global lock check - skip if any transcription in progress
+        if (transcriptionInProgress) {
+          log('DEBUG', 'main', `Skipping intermediate_silence - transcription in progress`);
           return;
         }
-        intermediateResultDisplayed = true;  // Lock: now processing
+        transcriptionInProgress = true;  // Acquire global lock
 
         log('INFO', 'main', `Intermediate silence detected (0.5s)`);
 
@@ -848,20 +850,27 @@ function spawnRecordingOnly() {
           // Clear buffer - audio already transcribed
           streamingAudioBuffer = [];
         }
-        // Reset flag after done (for next silence period)
-        intermediateResultDisplayed = false;
+        transcriptionInProgress = false;  // Release global lock
       }
 
       // Handle final silence (5s) - output text and stop
       if (trimmedLine.includes('"event": "final_silence"') ||
           trimmedLine.includes('"event": "max_duration"')) {
-        // Set flag to prevent any further intermediate processing
-        intermediateResultDisplayed = true;
+        // Global lock check - skip if transcription already done by intermediate
+        if (transcriptionInProgress) {
+          log('DEBUG', 'main', `Skipping final_silence - transcription in progress`);
+          return;
+        }
+        // Check if buffer was already processed
+        if (streamingAudioBuffer.length === 0) {
+          log('DEBUG', 'main', `Skipping final_silence - buffer already empty`);
+          return;
+        }
+        transcriptionInProgress = true;  // Acquire global lock
 
         log('INFO', 'main', `Final event: ${trimmedLine}`);
 
         // Transcribe and insert any remaining audio immediately
-        // Don't wait for process exit - this prevents duplicate insertion
         if (streamingAudioBuffer.length > 0 && wsConnected && wsClient) {
           const audioData = Buffer.concat(streamingAudioBuffer);
           log('INFO', 'main', `Final transcription: ${audioData.length} bytes`);
@@ -878,6 +887,7 @@ function spawnRecordingOnly() {
           // Clear buffer - audio already transcribed
           streamingAudioBuffer = [];
         }
+        // Keep lock held - process is ending, no more transcription needed
       }
     }
   });
@@ -888,8 +898,17 @@ function spawnRecordingOnly() {
     processTimeout = null;
     pythonProcess = null;
 
-    // Handle any remaining audio
+    // Global lock check - skip if transcription already done by final_silence
+    if (transcriptionInProgress) {
+      log('DEBUG', 'main', `Skipping on_close transcription - already done`);
+      setState('success');
+      scheduleReset(500);
+      return;
+    }
+
+    // Handle any remaining audio (only if not already processed)
     if (code === 0 && streamingAudioBuffer.length > 0) {
+      transcriptionInProgress = true;  // Acquire global lock
       const audioData = Buffer.concat(streamingAudioBuffer);
       log('INFO', 'main', `Final: ${audioData.length} bytes`);
 
