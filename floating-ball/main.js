@@ -957,34 +957,6 @@ function spawnRecordingOnly() {
   }, timeout);
 }
 
-// Insert text immediately without changing state (for intermediate results)
-async function insertTextImmediately(text) {
-  const { clipboard } = require('electron');
-  const { execSync } = require('child_process');
-
-  log('INFO', 'insertText', `Inserting: "${text}"`);
-
-  try {
-    // Write to clipboard
-    clipboard.writeText(text);
-
-    // Wait briefly for clipboard
-    await new Promise(resolve => setTimeout(resolve, 50));
-
-    // Send Ctrl+V
-    const psScript = `
-Add-Type -AssemblyName System.Windows.Forms
-[System.Windows.Forms.SendKeys]::SendWait("^v")
-`;
-    const base64Cmd = Buffer.from(psScript, 'utf16le').toString('base64');
-    execSync(`powershell -EncodedCommand ${base64Cmd}`, { timeout: 5000 });
-
-    log('INFO', 'insertText', `Inserted successfully`);
-  } catch (e) {
-    log('ERROR', 'insertText', `Failed: ${e.message}`);
-  }
-}
-
 async function handleTranscriptionResult(text) {
   // Return focus BEFORE inserting text
   await returnFocusToPreviousApp();
