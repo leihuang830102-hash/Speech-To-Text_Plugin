@@ -820,6 +820,13 @@ function spawnRecordingOnly() {
 
       // Handle intermediate silence (0.5s) - output text and continue recording
       if (trimmedLine.includes('"event": "intermediate_silence"')) {
+        // Prevent concurrent processing - if already processing an intermediate, skip
+        if (intermediateResultDisplayed) {
+          log('DEBUG', 'main', `Skipping intermediate_silence - already processing`);
+          return;
+        }
+        intermediateResultDisplayed = true;  // Lock: now processing
+
         log('INFO', 'main', `Intermediate silence detected (0.5s)`);
 
         // Small delay to ensure audio data is flushed
@@ -841,11 +848,16 @@ function spawnRecordingOnly() {
           // Clear buffer - audio already transcribed
           streamingAudioBuffer = [];
         }
+        // Reset flag after done (for next silence period)
+        intermediateResultDisplayed = false;
       }
 
       // Handle final silence (5s) - output text and stop
       if (trimmedLine.includes('"event": "final_silence"') ||
           trimmedLine.includes('"event": "max_duration"')) {
+        // Set flag to prevent any further intermediate processing
+        intermediateResultDisplayed = true;
+
         log('INFO', 'main', `Final event: ${trimmedLine}`);
 
         // Transcribe and insert any remaining audio immediately
