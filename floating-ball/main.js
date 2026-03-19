@@ -145,6 +145,21 @@ function buildContextMenu() {
 function switchBackend(backend) {
   log('INFO', 'config', `Switching backend to: ${backend}`);
 
+  // CRITICAL: Clear audio buffer and reset state before switching
+  // This prevents residual audio from being processed after switch
+  streamingAudioBuffer = [];
+  intermediateResultDisplayed = false;
+
+  // If currently recording or processing, stop first
+  if (state !== 'idle') {
+    log('WARN', 'config', `Stopping current recording (state: ${state}) before backend switch`);
+    if (state === 'recording') {
+      cleanupPythonProcess();
+    }
+    setState('idle');
+    restoreWindow();
+  }
+
   // Send switch_backend command to server via WebSocket
   if (wsConnected && wsClient) {
     wsClient.send(JSON.stringify({ action: 'switch_backend', backend: backend }));
