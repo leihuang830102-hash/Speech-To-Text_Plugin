@@ -49,6 +49,10 @@ function loadConfig() {
       silenceThreshold: 0.01,
       minDuration: 1.5
     },
+    hotkey: {
+      enabled: true,
+      key: 'CommandOrControl+Alt+Space'  // Electron accelerator format
+    },
     window: { width: 60, height: 60, rememberPosition: true },
     logging: { level: 'INFO', logToFile: true },
     timeout: { maxProcessingTime: 300000 }
@@ -258,24 +262,33 @@ Add-Type -MemberDefinition '[DllImport("user32.dll")] public static extern short
 }
 
 /**
- * Register Right Ctrl as global hotkey
+ * Register global hotkey for recording (configurable via config.json)
  */
 function registerGlobalHotkey() {
   const { globalShortcut } = require('electron');
 
-  // Unregister first in case of re-registration
-  if (globalShortcut.isRegistered('RightControl')) {
-    globalShortcut.unregister('RightControl');
+  // Check if hotkey is enabled
+  if (!config.hotkey?.enabled) {
+    log('INFO', 'hotkey', 'Hotkey disabled in config');
+    return false;
   }
 
-  const registered = globalShortcut.register('RightControl', () => {
-    onRightCtrlPressed();
+  const accelerator = config.hotkey?.key || 'CommandOrControl+Alt+Space';
+  log('INFO', 'hotkey', `Attempting to register hotkey: ${accelerator}`);
+
+  // Unregister first in case of re-registration
+  if (globalShortcut.isRegistered(accelerator)) {
+    globalShortcut.unregister(accelerator);
+  }
+
+  const registered = globalShortcut.register(accelerator, () => {
+    onHotkeyPressed();
   });
 
   if (registered) {
-    log('INFO', 'hotkey', 'RightCtrl hotkey registered successfully');
+    log('INFO', 'hotkey', `Hotkey registered: ${accelerator}`);
   } else {
-    log('ERROR', 'hotkey', 'Failed to register RightCtrl hotkey - may be in use by another app');
+    log('ERROR', 'hotkey', `Failed to register hotkey: ${accelerator} - may be in use by another app`);
   }
 
   return registered;
@@ -290,44 +303,36 @@ function unregisterGlobalHotkey() {
   log('INFO', 'hotkey', 'Global hotkeys unregistered');
 }
 
-// Polling interval reference for cleanup
-let hotkeyPollInterval = null;
+// Debounce tracking for hotkey
+let lastHotkeyTime = 0;
+const HOTKEY_DEBOUNCE_MS = 300; // Minimum time between hotkey triggers
 
 /**
- * Handle Right Ctrl key press
- * Starts recording and polls for key release
+ * Handle hotkey press
+ * Toggle mode: start recording if idle, stop if recording
  */
-function onRightCtrlPressed() {
-  log('INFO', 'hotkey', 'RightCtrl pressed');
+function onHotkeyPressed() {
+  const now = Date.now();
 
-  // Check if we can start recording
-  if (state !== 'idle') {
-    log('DEBUG', 'hotkey', `Ignoring hotkey, state is ${state} (not idle)`);
+  // Debounce: ignore if triggered too quickly after last trigger
+  if (now - lastHotkeyTime < HOTKEY_DEBOUNCE_MS) {
+    log('DEBUG', 'hotkey', `Hotkey debounced (${now - lastHotkeyTime}ms since last trigger)`);
     return;
   }
+  lastHotkeyTime = now;
 
-  // Start recording using existing function
-  startRecording();
+  const accelerator = config.hotkey?.key || 'CommandOrControl+Alt+Space';
+  log('INFO', 'hotkey', `Hotkey ${accelerator} pressed, current state: ${state}`);
 
-  // Clear any existing poll interval
-  if (hotkeyPollInterval) {
-    clearInterval(hotkeyPollInterval);
-    hotkeyPollInterval = null;
+  if (state === 'idle') {
+    // Start recording
+    startRecording();
+  } else if (state === 'recording') {
+    // Stop recording
+    stopRecording();
+  } else {
+    log('DEBUG', 'hotkey', `Ignoring hotkey in state: ${state}`);
   }
-
-  // Poll for key release every 50ms
-  hotkeyPollInterval = setInterval(() => {
-    if (!isRightCtrlPressed()) {
-      log('INFO', 'hotkey', 'RightCtrl released');
-      clearInterval(hotkeyPollInterval);
-      hotkeyPollInterval = null;
-
-      // Only stop if we're still recording (not already stopped by other means)
-      if (state === 'recording') {
-        stopRecording();
-      }
-    }
-  }, 50);
 }
 
 // ============================================================================
@@ -820,6 +825,25 @@ function spawnRecordingOnly() {
       if (trimmedLine.includes('"event": "final_silence"') ||
           trimmedLine.includes('"event": "max_duration"')) {
         log('INFO', 'main', `Final event: ${trimmedLine}`);
+
+        // Transcribe and insert any remaining audio immediately
+        // Don't wait for process exit - this prevents duplicate insertion
+        if (streamingAudioBuffer.length > 0 && wsConnected && wsClient) {
+          const audioData = Buffer.concat(streamingAudioBuffer);
+          log('INFO', 'main', `Final transcription: ${audioData.length} bytes`);
+
+          try {
+            const text = await sendAudioToServer(audioData, false);
+            if (text && text.trim()) {
+              log('INFO', 'main', `Final text: "${text}"`);
+              await insertTextImmediately(text);
+            }
+          } catch (e) {
+            log('WARN', 'main', `Final transcription failed: ${e.message}`);
+          }
+          // Clear buffer - audio already transcribed
+          streamingAudioBuffer = [];
+        }
       }
     }
   });
@@ -1276,11 +1300,6 @@ app.on('window-all-closed', () => {
   if (wsClient) {
     wsClient.close();
     wsClient = null;
-  }
-  // Clear hotkey polling interval
-  if (hotkeyPollInterval) {
-    clearInterval(hotkeyPollInterval);
-    hotkeyPollInterval = null;
   }
   if (process.platform !== 'darwin') {
     app.quit();
