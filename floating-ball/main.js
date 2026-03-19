@@ -754,9 +754,10 @@ function cleanupPythonProcess() {
     clearTimeout(processTimeout);
     processTimeout = null;
   }
-  // CRITICAL: Clear audio buffer and reset flags
+  // CRITICAL: Clear audio buffer and reset ALL flags
   streamingAudioBuffer = [];
   intermediateResultDisplayed = false;
+  transcriptionInProgress = false;  // MUST reset this lock!
 }
 
 // WebSocket mode: Record audio with Python, transcribe via WebSocket
@@ -926,6 +927,7 @@ function spawnRecordingOnly() {
         scheduleReset(1000);
       }
       streamingAudioBuffer = [];
+      transcriptionInProgress = false;  // Release lock after processing
     } else if (code === 0) {
       // No remaining audio, just go to success
       setState('success');
